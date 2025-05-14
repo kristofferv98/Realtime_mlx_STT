@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__repository_tools__repository_prompt",
+      "Bash(grep:*)",
+      "Bash(rm:*)",
+      "Bash(sed:*)",
+      "Bash(source:*)",
+      "Bash(uv pip install:*)",
+      "Bash(python tests:*)"
+    ],
+    "deny": []
+  }
+}
