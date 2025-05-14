@@ -40,3 +40,7 @@ ENV/
 
 # External repositories
 whisper_turboapi_temp/
+
+# Claude-specific files
+CLAUDE.md
+.claude/
