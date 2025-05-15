@@ -1,25 +1,28 @@
 """
 Voice Activity Detector interface.
 
-This module defines the IVoiceActivityDetector interface that abstracts the voice activity
+This module defines the IVoiceActivityDetector interface that abstracts the speech
 detection functionality in the system.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple
 
 
 class IVoiceActivityDetector(ABC):
     """
-    Interface for voice activity detection components that identify speech in audio.
+    Interface for voice activity detectors that identify speech in audio data.
     
-    Implementations might include WebRTC VAD, Silero VAD, or combined approaches.
+    Voice activity detectors analyze audio data to determine whether it contains
+    speech. Different implementations may use different algorithms and have
+    different performance characteristics in terms of accuracy, latency, and
+    resource usage.
     """
     
     @abstractmethod
     def setup(self) -> bool:
         """
-        Initialize the VAD component.
+        Initialize the voice activity detector and prepare it for use.
         
         Returns:
             bool: True if setup was successful, False otherwise
@@ -27,12 +30,13 @@ class IVoiceActivityDetector(ABC):
         pass
     
     @abstractmethod
-    def is_speech(self, audio_chunk: bytes) -> bool:
+    def detect(self, audio_data: bytes, sample_rate: Optional[int] = None) -> bool:
         """
-        Determine if an audio chunk contains speech.
+        Detect if the provided audio data contains speech.
         
         Args:
-            audio_chunk: Raw audio data as bytes
+            audio_data: Raw audio data as bytes
+            sample_rate: Sample rate of the audio data (optional, can use default)
             
         Returns:
             bool: True if speech is detected, False otherwise
@@ -40,31 +44,66 @@ class IVoiceActivityDetector(ABC):
         pass
     
     @abstractmethod
-    def reset(self) -> None:
+    def detect_with_confidence(self, audio_data: bytes, 
+                              sample_rate: Optional[int] = None) -> Tuple[bool, float]:
         """
-        Reset the internal state of the VAD component.
-        """
-        pass
-    
-    @abstractmethod
-    def get_config(self) -> Dict[str, Any]:
-        """
-        Get the current configuration of the VAD component.
-        
-        Returns:
-            Dict[str, Any]: Configuration parameters
-        """
-        pass
-    
-    @abstractmethod
-    def set_config(self, config: Dict[str, Any]) -> bool:
-        """
-        Update the configuration of the VAD component.
+        Detect if the provided audio data contains speech and return confidence level.
         
         Args:
-            config: Configuration parameters to update
+            audio_data: Raw audio data as bytes
+            sample_rate: Sample rate of the audio data (optional, can use default)
             
         Returns:
-            bool: True if configuration was successfully updated
+            Tuple[bool, float]: (speech_detected, confidence_score)
+        """
+        pass
+    
+    @abstractmethod
+    def configure(self, config: Dict[str, Any]) -> bool:
+        """
+        Configure the voice activity detector with the provided parameters.
+        
+        Args:
+            config: Dictionary of configuration parameters
+            
+        Returns:
+            bool: True if configuration was successful, False otherwise
+        """
+        pass
+    
+    @abstractmethod
+    def reset(self) -> None:
+        """
+        Reset the internal state of the voice activity detector.
+        
+        This is useful when starting a new detection session to clear any
+        accumulated state.
+        """
+        pass
+    
+    @abstractmethod
+    def get_configuration(self) -> Dict[str, Any]:
+        """
+        Get the current configuration of the voice activity detector.
+        
+        Returns:
+            Dict[str, Any]: Dictionary of current configuration parameters
+        """
+        pass
+    
+    @abstractmethod
+    def get_name(self) -> str:
+        """
+        Get the name of the voice activity detector implementation.
+        
+        Returns:
+            str: Name of the detector
+        """
+        pass
+    
+    @abstractmethod
+    def cleanup(self) -> None:
+        """
+        Clean up resources used by the voice activity detector.
         """
         pass
