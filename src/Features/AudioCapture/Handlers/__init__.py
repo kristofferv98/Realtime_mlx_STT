@@ -1,3 +1,10 @@
+"""AudioCapture Command Handlers.
+
+This module exports all command handler classes for the AudioCapture feature.
 """
-Handlers for the audio capture feature.
-"""
+
+from .AudioCommandHandler import AudioCommandHandler
+
+__all__ = [
+    'AudioCommandHandler'
+]

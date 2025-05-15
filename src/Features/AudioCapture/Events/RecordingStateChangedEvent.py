@@ -1,22 +1,60 @@
+"""
+RecordingStateChangedEvent for notifying about recording state changes.
+
+This event is published when the recording state changes, such as 
+when recording starts, stops, or encounters an error.
+"""
+
 from dataclasses import dataclass
-from typing import Optional, Literal
+from typing import Optional, Dict, Any
+from enum import Enum, auto
 from src.Core.Events.event import Event
+
+
+class RecordingState(Enum):
+    """Enumeration of possible recording states."""
+    INITIALIZED = auto()
+    STARTING = auto()
+    RECORDING = auto()
+    PAUSED = auto()
+    STOPPING = auto()
+    STOPPED = auto()
+    ERROR = auto()
 
 
 @dataclass
 class RecordingStateChangedEvent(Event):
-    """Event emitted when the recording state changes."""
+    """
+    Event published when the recording state changes.
     
-    # The new recording state
-    state: Literal["started", "stopped", "paused", "error", "device_changed"]
+    This event contains information about the previous and current recording
+    states, along with any relevant metadata.
     
-    # Optional message with additional information
-    message: Optional[str] = None
+    Args:
+        previous_state: The previous recording state
+        current_state: The current recording state
+        device_id: The ID of the device being used for recording
+        error_message: Optional error message if the state is ERROR
+        metadata: Additional metadata about the recording
+    """
     
-    # Device ID if relevant
-    device_id: Optional[int] = None
+    # The previous recording state
+    previous_state: RecordingState
+    
+    # The current recording state
+    current_state: RecordingState
+    
+    # ID of the device being used for recording
+    device_id: int
+    
+    # Optional error message if state is ERROR
+    error_message: Optional[str] = None
+    
+    # Additional metadata
+    metadata: Dict[str, Any] = None
     
     def __post_init__(self):
+        """Initialize empty metadata dict if None."""
         super().__post_init__()
-        if self.name is None:
-            self.name = "RecordingStateChangedEvent"
+        if self.metadata is None:
+            self.metadata = {}

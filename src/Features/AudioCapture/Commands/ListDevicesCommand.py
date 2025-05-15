@@ -1,15 +1,21 @@
+"""
+ListDevicesCommand for retrieving audio device information.
+
+This command requests a list of available audio input devices.
+"""
+
 from dataclasses import dataclass
 from src.Core.Commands.command import Command
 
 
 @dataclass
 class ListDevicesCommand(Command):
-    """Command to list available audio input devices."""
+    """
+    Command to request a list of available audio input devices.
     
-    # Whether to refresh the device list
-    refresh: bool = True
+    When handled, this command will return a list of DeviceInfo objects
+    representing all available audio input devices.
+    """
     
-    def __post_init__(self):
-        super().__post_init__()
-        if self.name is None:
-            self.name = "ListDevicesCommand"
+    # No additional parameters needed for this command
+    pass

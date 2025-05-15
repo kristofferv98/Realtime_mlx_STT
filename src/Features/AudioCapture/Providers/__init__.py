@@ -1,3 +1,12 @@
+"""AudioCapture Provider Implementations.
+
+This module exports all provider classes for the AudioCapture feature.
 """
-Providers for the audio capture feature.
-"""
+
+from .PyAudioInputProvider import PyAudioInputProvider
+from .FileAudioProvider import FileAudioProvider
+
+__all__ = [
+    'PyAudioInputProvider',
+    'FileAudioProvider'
+]

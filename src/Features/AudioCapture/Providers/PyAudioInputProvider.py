@@ -1,202 +1,127 @@
-import pyaudio
-import numpy as np
+"""
+PyAudioInputProvider for capturing audio from microphones using PyAudio.
+
+This provider implements the IAudioProvider interface using PyAudio to
+capture audio from system microphones.
+"""
+
+import logging
 import threading
 import time
-import logging
-from typing import Dict, Any, List, Optional
-from colorama import init, Fore, Style
-from scipy.signal import butter, filtfilt, resample_poly
+from typing import List, Dict, Any, Optional, Tuple
+
+import numpy as np
+import pyaudio
+from scipy import signal
 
 from src.Core.Common.Interfaces.audio_provider import IAudioProvider
+from src.Core.Events.event_bus import IEventBus
+from src.Features.AudioCapture.Models.DeviceInfo import DeviceInfo
+from src.Features.AudioCapture.Models.AudioChunk import AudioChunk
+from src.Features.AudioCapture.Events.AudioChunkCapturedEvent import AudioChunkCapturedEvent
+from src.Features.AudioCapture.Events.RecordingStateChangedEvent import (
+    RecordingStateChangedEvent, RecordingState
+)
 
-logger = logging.getLogger(__name__)
 
 class PyAudioInputProvider(IAudioProvider):
     """
-    Implementation of IAudioProvider using PyAudio for microphone input.
-    This adapts the original AudioInput class to the new architecture.
+    PyAudio implementation of IAudioProvider for microphone input.
+    
+    This provider uses PyAudio to access system microphones and capture
+    audio data. It supports listing devices, configuring recording parameters,
+    and streaming audio data in chunks.
     """
     
-    def __init__(
-            self,
-            input_device_index: Optional[int] = None,
-            debug_mode: bool = False,
-            target_samplerate: int = 16000,
-            chunk_size: int = 512,
-            audio_format: int = pyaudio.paInt16,
-            channels: int = 1,
-            resample_to_target: bool = True,
-        ):
+    def __init__(self, 
+                 event_bus: IEventBus, 
+                 device_id: Optional[int] = None,
+                 sample_rate: int = 16000,
+                 chunk_size: int = 512,
+                 channels: int = 1,
+                 audio_format: int = pyaudio.paInt16,
+                 debug_mode: bool = False):
         """
         Initialize the PyAudio input provider.
         
         Args:
-            input_device_index: Optional device index, None for default
-            debug_mode: Enable debug logging
-            target_samplerate: Desired sample rate in Hz
-            chunk_size: Desired chunk size in samples
-            audio_format: PyAudio format constant
-            channels: Number of audio channels
-            resample_to_target: Whether to resample if device doesn't match target
+            event_bus: Event bus to publish events to
+            device_id: Device ID to use (None for default device)
+            sample_rate: Sample rate in Hz (default: 16000)
+            chunk_size: Chunk size in samples (default: 512)
+            channels: Number of audio channels (default: 1 for mono)
+            audio_format: PyAudio format (default: paInt16)
+            debug_mode: Whether to print debug information
         """
-        self.input_device_index = input_device_index
+        self.logger = logging.getLogger(__name__)
+        self.event_bus = event_bus
+        self.device_id = device_id
+        self.target_sample_rate = sample_rate
+        self.chunk_size = chunk_size
+        self.channels = channels
+        self.audio_format = audio_format
         self.debug_mode = debug_mode
+        
+        # PyAudio objects
         self.audio_interface = None
         self.stream = None
+        
+        # Recording state tracking
+        self.is_recording = False
+        self.recording_thread = None
+        self.stop_recording_event = threading.Event()
+        self.sequence_number = 0
         self.device_sample_rate = None
-        self.target_samplerate = target_samplerate
-        self.chunk_size = chunk_size
-        self.audio_format = audio_format
-        self.channels = channels
-        self.resample_to_target = resample_to_target
-        self._is_running = False
-        self._lock = threading.RLock()
+        self.current_state = RecordingState.INITIALIZED
         
-    def get_supported_sample_rates(self, device_index):
-        """Test which standard sample rates are supported by the specified device."""
-        standard_rates = [8000, 9600, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000]
-        supported_rates = []
-
-        device_info = self.audio_interface.get_device_info_by_index(device_index)
-        max_channels = device_info.get('maxInputChannels')
-
-        for rate in standard_rates:
-            try:
-                if self.audio_interface.is_format_supported(
-                    rate,
-                    input_device=device_index,
-                    input_channels=max_channels,
-                    input_format=self.audio_format,
-                ):
-                    supported_rates.append(rate)
-            except:
-                continue
-        return supported_rates
-
-    def _get_best_sample_rate(self, actual_device_index, desired_rate):
-        """Determines the best available sample rate for the device."""
-        try:
-            device_info = self.audio_interface.get_device_info_by_index(actual_device_index)
-            supported_rates = self.get_supported_sample_rates(actual_device_index)
-
-            if desired_rate in supported_rates:
-                return desired_rate
-
-            return max(supported_rates)
-
-            # The following code is commented out as in the original implementation
-            # lower_rates = [r for r in supported_rates if r <= desired_rate]
-            # if lower_rates:
-            #     return max(lower_rates)
-            # higher_rates = [r for r in supported_rates if r > desired_rate]
-            # if higher_rates:
-            #     return min(higher_rates)
-
-            return int(device_info.get('defaultSampleRate', 44100))
-
-        except Exception as e:
-            logging.warning(f"Error determining sample rate: {e}")
-            return 44100  # Safe fallback
-
-    def list_devices(self) -> List[Dict[str, Any]]:
-        """
-        List all available audio input devices with supported sample rates.
-        
-        Returns:
-            List[Dict[str, Any]]: List of device information dictionaries
-        """
-        devices = []
-        try:
-            init()  # Initialize colorama
-            temp_audio_interface = pyaudio.PyAudio() if self.audio_interface is None else self.audio_interface
-            device_count = temp_audio_interface.get_device_count()
-
-            if self.debug_mode:
-                print(f"Available audio input devices:")
-            
-            for i in range(device_count):
-                device_info = temp_audio_interface.get_device_info_by_index(i)
-                device_name = device_info.get('name')
-                max_input_channels = device_info.get('maxInputChannels', 0)
-
-                if max_input_channels > 0:  # Only consider devices with input capabilities
-                    supported_rates = self.get_supported_sample_rates(i) if self.audio_interface else []
-                    
-                    if self.debug_mode:
-                        print(f"{Fore.LIGHTGREEN_EX}Device {Style.RESET_ALL}{i}{Fore.LIGHTGREEN_EX}: {device_name}{Style.RESET_ALL}")
-                        rates_formatted = ", ".join([f"{Fore.CYAN}{rate}{Style.RESET_ALL}" for rate in supported_rates])
-                        print(f"  {Fore.YELLOW}Supported sample rates: {rates_formatted}{Style.RESET_ALL}")
-                    
-                    # Create standardized device info dictionary
-                    device = {
-                        'id': i,
-                        'name': device_name,
-                        'max_input_channels': max_input_channels,
-                        'default_sample_rate': int(device_info.get('defaultSampleRate', 44100)),
-                        'supported_sample_rates': supported_rates,
-                        'is_default': i == temp_audio_interface.get_default_input_device_info()['index'],
-                        'original_info': device_info
-                    }
-                    devices.append(device)
-
-            # Clean up if we created a temporary interface
-            if self.audio_interface is None and temp_audio_interface:
-                temp_audio_interface.terminate()
-                
-            return devices
-
-        except Exception as e:
-            logger.error(f"Error listing devices: {e}")
-            return []
-
     def setup(self) -> bool:
         """
-        Initialize audio interface and open stream.
+        Initialize the PyAudio interface and prepare for recording.
         
         Returns:
             bool: True if setup was successful, False otherwise
         """
-        with self._lock:
-            try:
-                self.audio_interface = pyaudio.PyAudio()
-
-                if self.debug_mode:
-                    logger.debug(f"Input device index: {self.input_device_index}")
-                
-                actual_device_index = (self.input_device_index if self.input_device_index is not None 
-                                    else self.audio_interface.get_default_input_device_info()['index'])
-                
-                if self.debug_mode:
-                    logger.debug(f"Actual selected device index: {actual_device_index}")
-                
-                self.input_device_index = actual_device_index
-                self.device_sample_rate = self._get_best_sample_rate(actual_device_index, self.target_samplerate)
-
-                if self.debug_mode:
-                    logger.debug(f"Setting up audio on device {self.input_device_index} with sample rate {self.device_sample_rate}")
-
-                try:
-                    self.stream = self.audio_interface.open(
-                        format=self.audio_format,
-                        channels=self.channels,
-                        rate=self.device_sample_rate,
-                        input=True,
-                        frames_per_buffer=self.chunk_size,
-                        input_device_index=self.input_device_index,
-                    )
-                    if self.debug_mode:
-                        logger.debug(f"Audio recording initialized successfully at {self.device_sample_rate} Hz")
-                    return True
-                except Exception as e:
-                    logger.error(f"Failed to initialize audio stream at {self.device_sample_rate} Hz: {e}")
-                    return False
-
-            except Exception as e:
-                logger.error(f"Error initializing audio recording: {e}")
-                if self.audio_interface:
-                    self.audio_interface.terminate()
-                return False
-
+        try:
+            self.logger.info("Setting up PyAudio input provider")
+            self.audio_interface = pyaudio.PyAudio()
+            
+            # Get the actual device to use (default if None)
+            actual_device_index = self.device_id
+            if actual_device_index is None:
+                actual_device_index = self.audio_interface.get_default_input_device_info()['index']
+                self.logger.info(f"Using default input device: {actual_device_index}")
+            
+            self.device_id = actual_device_index
+            
+            # Determine best sample rate for device
+            self.device_sample_rate = self._get_best_sample_rate(actual_device_index)
+            
+            if self.debug_mode:
+                self.logger.debug(f"Setting up audio on device {self.device_id} with sample rate {self.device_sample_rate}")
+            
+            # Publish state change event
+            self._publish_state_change(
+                RecordingState.INITIALIZED, 
+                RecordingState.INITIALIZED
+            )
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error initializing PyAudio: {e}")
+            if self.audio_interface:
+                self.audio_interface.terminate()
+                self.audio_interface = None
+            
+            # Publish error state
+            self._publish_state_change(
+                RecordingState.INITIALIZED,
+                RecordingState.ERROR,
+                error_message=str(e)
+            )
+            
+            return False
+    
     def start(self) -> bool:
         """
         Start the audio capture process.
@@ -204,12 +129,68 @@ class PyAudioInputProvider(IAudioProvider):
         Returns:
             bool: True if successfully started, False otherwise
         """
-        with self._lock:
-            if self.stream is None:
-                return self.setup()
-            self._is_running = True
+        if self.is_recording:
+            self.logger.warning("Recording already in progress")
+            return False
+        
+        if not self.audio_interface:
+            self.logger.error("PyAudio not initialized. Call setup() first.")
+            return False
+        
+        try:
+            # Update state
+            self._publish_state_change(
+                self.current_state,
+                RecordingState.STARTING
+            )
+            
+            # Open audio stream
+            self.stream = self.audio_interface.open(
+                format=self.audio_format,
+                channels=self.channels,
+                rate=self.device_sample_rate,
+                input=True,
+                frames_per_buffer=self.chunk_size,
+                input_device_index=self.device_id,
+            )
+            
+            # Reset sequence number and start recording thread
+            self.sequence_number = 0
+            self.stop_recording_event.clear()
+            self.is_recording = True
+            
+            self.recording_thread = threading.Thread(
+                target=self._recording_worker,
+                daemon=True
+            )
+            self.recording_thread.start()
+            
+            # Update state
+            self._publish_state_change(
+                RecordingState.STARTING,
+                RecordingState.RECORDING
+            )
+            
+            self.logger.info(f"Started recording on device {self.device_id} at {self.device_sample_rate} Hz")
             return True
-
+            
+        except Exception as e:
+            self.logger.error(f"Error starting recording: {e}")
+            
+            # Clean up if stream was created
+            if self.stream:
+                self.stream.close()
+                self.stream = None
+            
+            # Update state
+            self._publish_state_change(
+                self.current_state,
+                RecordingState.ERROR,
+                error_message=str(e)
+            )
+            
+            return False
+    
     def stop(self) -> bool:
         """
         Stop the audio capture process.
@@ -217,10 +198,62 @@ class PyAudioInputProvider(IAudioProvider):
         Returns:
             bool: True if successfully stopped, False otherwise
         """
-        with self._lock:
-            self._is_running = False
+        if not self.is_recording:
+            self.logger.warning("No recording in progress")
+            return False
+        
+        try:
+            # Update state
+            self._publish_state_change(
+                self.current_state,
+                RecordingState.STOPPING
+            )
+            
+            # Signal recording thread to stop and wait for it
+            self.stop_recording_event.set()
+            if self.recording_thread and self.recording_thread.is_alive():
+                self.recording_thread.join(timeout=2.0)
+                if self.recording_thread.is_alive():
+                    self.logger.warning("Recording thread did not stop in time")
+            
+            # Close the stream
+            if self.stream:
+                self.stream.stop_stream()
+                self.stream.close()
+                self.stream = None
+            
+            self.is_recording = False
+            
+            # Update state
+            self._publish_state_change(
+                RecordingState.STOPPING,
+                RecordingState.STOPPED
+            )
+            
+            self.logger.info("Stopped recording")
             return True
-
+            
+        except Exception as e:
+            self.logger.error(f"Error stopping recording: {e}")
+            
+            # Force stop recording state regardless of error
+            self.is_recording = False
+            if self.stream:
+                try:
+                    self.stream.close()
+                except Exception:
+                    pass
+                self.stream = None
+            
+            # Update state
+            self._publish_state_change(
+                self.current_state,
+                RecordingState.ERROR,
+                error_message=str(e)
+            )
+            
+            return False
+    
     def read_chunk(self) -> bytes:
         """
         Read a single chunk of audio data.
@@ -228,37 +261,16 @@ class PyAudioInputProvider(IAudioProvider):
         Returns:
             bytes: Raw audio data as bytes
         """
-        if not self._is_running or self.stream is None:
-            # Return empty audio chunk if not running
-            return b'\x00' * (self.chunk_size * 2)  # 2 bytes per sample for int16
+        if not self.is_recording or not self.stream:
+            self.logger.warning("Cannot read chunk: no active recording")
+            return b''
         
-        # Read from stream
-        raw_data = self.stream.read(self.chunk_size, exception_on_overflow=False)
-        
-        # Resample if necessary
-        if self.resample_to_target and self.device_sample_rate != self.target_samplerate:
-            audio_np = np.frombuffer(raw_data, dtype=np.int16)
-            
-            # Apply filtering for downsampling
-            if self.target_samplerate < self.device_sample_rate:
-                audio_np = self.lowpass_filter(
-                    audio_np, 
-                    self.target_samplerate / 2, 
-                    self.device_sample_rate
-                )
-            
-            # Resample to target rate
-            resampled = self.resample_audio(
-                audio_np,
-                self.target_samplerate,
-                self.device_sample_rate
-            )
-            
-            # Convert back to bytes
-            return resampled.astype(np.int16).tobytes()
-            
-        return raw_data
-
+        try:
+            return self.stream.read(self.chunk_size, exception_on_overflow=False)
+        except Exception as e:
+            self.logger.error(f"Error reading audio chunk: {e}")
+            return b''
+    
     def get_sample_rate(self) -> int:
         """
         Get the sample rate of the audio data.
@@ -266,8 +278,8 @@ class PyAudioInputProvider(IAudioProvider):
         Returns:
             int: Sample rate in Hz
         """
-        return self.target_samplerate if self.resample_to_target else self.device_sample_rate
-
+        return self.target_sample_rate
+    
     def get_chunk_size(self) -> int:
         """
         Get the size of each audio chunk in samples.
@@ -276,68 +288,275 @@ class PyAudioInputProvider(IAudioProvider):
             int: Chunk size in samples
         """
         return self.chunk_size
-
+    
     def cleanup(self) -> None:
         """
         Clean up resources used by the audio provider.
         """
-        with self._lock:
+        self.logger.info("Cleaning up PyAudio resources")
+        
+        if self.is_recording:
+            self.stop()
+        
+        if self.audio_interface:
+            self.audio_interface.terminate()
+            self.audio_interface = None
+    
+    def list_devices(self) -> List[Dict[str, Any]]:
+        """
+        List available audio input devices.
+        
+        Returns:
+            List[Dict[str, Any]]: List of device information dictionaries
+        """
+        device_infos = []
+        
+        try:
+            if not self.audio_interface:
+                self.audio_interface = pyaudio.PyAudio()
+            
+            # Get default device info
             try:
-                if self.stream:
-                    self.stream.stop_stream()
-                    self.stream.close()
-                    self.stream = None
-                if self.audio_interface:
-                    self.audio_interface.terminate()
-                    self.audio_interface = None
-                self._is_running = False
-            except Exception as e:
-                logger.error(f"Error cleaning up audio resources: {e}")
-
+                default_device_info = self.audio_interface.get_default_input_device_info()
+                default_device_index = default_device_info['index']
+            except IOError:
+                default_device_index = -1
+            
+            # Iterate through all devices
+            device_count = self.audio_interface.get_device_count()
+            for i in range(device_count):
+                try:
+                    device_info = self.audio_interface.get_device_info_by_index(i)
+                    max_input_channels = device_info.get('maxInputChannels', 0)
+                    
+                    # Only include devices with input capabilities
+                    if max_input_channels > 0:
+                        supported_rates = self._get_supported_sample_rates(i)
+                        
+                        # Create DeviceInfo object
+                        is_default = (i == default_device_index)
+                        device = DeviceInfo.from_pyaudio_device_info(
+                            device_id=i,
+                            device_info=device_info,
+                            supported_rates=supported_rates,
+                            is_default=is_default
+                        )
+                        
+                        # Convert to dictionary for return
+                        device_dict = {
+                            'device_id': device.device_id,
+                            'name': device.name,
+                            'max_input_channels': device.max_input_channels,
+                            'default_sample_rate': device.default_sample_rate,
+                            'supported_sample_rates': device.supported_sample_rates,
+                            'is_default': device.is_default
+                        }
+                        
+                        device_infos.append(device_dict)
+                except Exception as e:
+                    self.logger.warning(f"Error getting info for device {i}: {e}")
+                    continue
+            
+        except Exception as e:
+            self.logger.error(f"Error listing devices: {e}")
+        
+        return device_infos
+    
     def is_running(self) -> bool:
         """
         Check if the audio provider is currently running.
         
         Returns:
-            bool: True if the provider is running
+            bool: True if the provider is recording
         """
-        return self._is_running
-
-    def lowpass_filter(self, signal, cutoff_freq, sample_rate):
+        return self.is_recording
+    
+    def _get_supported_sample_rates(self, device_index: int) -> List[int]:
         """
-        Apply a low-pass Butterworth filter to prevent aliasing in the signal.
-
+        Test which standard sample rates are supported by the device.
+        
         Args:
-            signal (np.ndarray): Input audio signal to filter
-            cutoff_freq (float): Cutoff frequency in Hz
-            sample_rate (float): Sampling rate of the input signal in Hz
-
+            device_index: The device index to check
+            
         Returns:
-            np.ndarray: Filtered audio signal
+            List[int]: List of supported sample rates
         """
-        nyquist_rate = sample_rate / 2.0
-        normal_cutoff = cutoff_freq / nyquist_rate
-        b, a = butter(5, normal_cutoff, btype='low', analog=False)
-        filtered_signal = filtfilt(b, a, signal)
-        return filtered_signal
-
-    def resample_audio(self, pcm_data, target_sample_rate, original_sample_rate):
+        standard_rates = [8000, 9600, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000]
+        supported_rates = []
+        
+        try:
+            device_info = self.audio_interface.get_device_info_by_index(device_index)
+            max_channels = device_info.get('maxInputChannels', 1)
+            
+            for rate in standard_rates:
+                try:
+                    if self.audio_interface.is_format_supported(
+                        rate,
+                        input_device=device_index,
+                        input_channels=max_channels if max_channels > 0 else 1,
+                        input_format=self.audio_format
+                    ):
+                        supported_rates.append(rate)
+                except Exception:
+                    continue
+        except Exception as e:
+            self.logger.warning(f"Error checking supported rates for device {device_index}: {e}")
+        
+        return supported_rates
+    
+    def _get_best_sample_rate(self, device_index: int) -> int:
         """
-        Filter and resample audio data to a target sample rate.
-
+        Determine the best sample rate for the device that's closest to the target.
+        
         Args:
-            pcm_data (np.ndarray): Input audio data
-            target_sample_rate (int): Desired output sample rate in Hz
-            original_sample_rate (int): Original sample rate of input in Hz
-
+            device_index: The device index to check
+            
         Returns:
-            np.ndarray: Resampled audio data
+            int: The best sample rate to use
         """
-        if target_sample_rate < original_sample_rate:
-            # Downsampling with low-pass filter
-            pcm_filtered = self.lowpass_filter(pcm_data, target_sample_rate / 2, original_sample_rate)
-            resampled = resample_poly(pcm_filtered, target_sample_rate, original_sample_rate)
+        try:
+            device_info = self.audio_interface.get_device_info_by_index(device_index)
+            supported_rates = self._get_supported_sample_rates(device_index)
+            
+            # If target rate is supported, use it
+            if self.target_sample_rate in supported_rates:
+                return self.target_sample_rate
+            
+            # Otherwise find the highest supported rate
+            if supported_rates:
+                return max(supported_rates)
+            
+            # Fall back to device default if no supported rates found
+            return int(device_info.get('defaultSampleRate', 44100))
+            
+        except Exception as e:
+            self.logger.warning(f"Error determining sample rate: {e}")
+            return 44100  # Safe fallback
+    
+    def _resample_audio(self, audio_data: bytes) -> Tuple[bytes, np.ndarray]:
+        """
+        Resample audio data from device rate to target rate if needed.
+        
+        Args:
+            audio_data: Raw audio data as bytes
+            
+        Returns:
+            Tuple[bytes, np.ndarray]: The resampled audio as bytes and numpy array
+        """
+        # Convert bytes to numpy array
+        audio_np = np.frombuffer(audio_data, dtype=np.int16)
+        
+        # If device and target rates match, no resampling needed
+        if self.device_sample_rate == self.target_sample_rate:
+            return audio_data, audio_np
+        
+        # Calculate target number of samples
+        target_num_samples = int(len(audio_np) * self.target_sample_rate / self.device_sample_rate)
+        
+        # Apply anti-aliasing filter if downsampling
+        if self.target_sample_rate < self.device_sample_rate:
+            # Calculate Nyquist frequency and normalized cutoff
+            nyquist = self.device_sample_rate / 2.0
+            cutoff = self.target_sample_rate / 2.0
+            normal_cutoff = cutoff / nyquist
+            
+            # Design and apply Butterworth filter
+            b, a = signal.butter(5, normal_cutoff, btype='low', analog=False)
+            filtered_audio = signal.filtfilt(b, a, audio_np)
+            
+            # Resample
+            resampled = signal.resample_poly(filtered_audio, self.target_sample_rate, 
+                                             self.device_sample_rate)
         else:
-            # Upsampling without low-pass filter
-            resampled = resample_poly(pcm_data, target_sample_rate, original_sample_rate)
-        return resampled
+            # Upsampling (no need for anti-aliasing filter)
+            resampled = signal.resample_poly(audio_np, self.target_sample_rate, 
+                                            self.device_sample_rate)
+        
+        # Convert back to int16
+        resampled_int16 = resampled.astype(np.int16)
+        
+        return resampled_int16.tobytes(), resampled_int16
+    
+    def _recording_worker(self):
+        """
+        Worker thread that continuously reads audio data and publishes events.
+        """
+        self.logger.info("Recording worker started")
+        
+        while self.is_recording and not self.stop_recording_event.is_set():
+            try:
+                # Read raw audio chunk
+                raw_data = self.read_chunk()
+                
+                if not raw_data:
+                    time.sleep(0.01)  # Avoid busy-waiting if read fails
+                    continue
+                
+                # Resample if needed
+                resampled_data, audio_array = self._resample_audio(raw_data)
+                
+                # Create timestamp for this chunk
+                timestamp = time.time()
+                
+                # Increment sequence number
+                self.sequence_number += 1
+                
+                # Create AudioChunk object
+                audio_chunk = AudioChunk(
+                    raw_data=resampled_data,
+                    sample_rate=self.target_sample_rate,
+                    channels=self.channels,
+                    format='int16',
+                    timestamp=timestamp,
+                    sequence_number=self.sequence_number
+                )
+                
+                # Publish event with the audio chunk
+                event = AudioChunkCapturedEvent(
+                    audio_chunk=audio_chunk,
+                    source_id='microphone',
+                    device_id=self.device_id,
+                    provider_name='PyAudioInputProvider'
+                )
+                
+                self.event_bus.publish(event)
+                
+            except Exception as e:
+                self.logger.error(f"Error in recording worker: {e}")
+                
+                # Check if we should still be recording after the error
+                if not self.is_recording or self.stop_recording_event.is_set():
+                    break
+                
+                # Sleep briefly to avoid rapid failure loops
+                time.sleep(0.1)
+        
+        self.logger.info("Recording worker stopped")
+    
+    def _publish_state_change(self, previous_state: RecordingState, 
+                             current_state: RecordingState, 
+                             error_message: Optional[str] = None):
+        """
+        Publish a state change event.
+        
+        Args:
+            previous_state: The previous recording state
+            current_state: The new recording state
+            error_message: Optional error message if state is ERROR
+        """
+        self.current_state = current_state
+        
+        event = RecordingStateChangedEvent(
+            previous_state=previous_state,
+            current_state=current_state,
+            device_id=self.device_id if self.device_id is not None else -1,
+            error_message=error_message,
+            metadata={
+                'sample_rate': self.target_sample_rate,
+                'chunk_size': self.chunk_size,
+                'channels': self.channels,
+                'device_sample_rate': self.device_sample_rate
+            }
+        )
+        
+        self.event_bus.publish(event)
