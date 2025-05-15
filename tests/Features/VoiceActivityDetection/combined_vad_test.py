@@ -8,23 +8,43 @@ including state transitions, speech detection accuracy, and configuration.
 import os
 import sys
 import unittest
-import numpy as np
-import wave
+import traceback
 from io import BytesIO
 import time
 
 # Add the project root to Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
-from src.Features.VoiceActivityDetection.Detectors import CombinedVadDetector
-from src.Features.VoiceActivityDetection.Detectors.CombinedVadDetector import DetectionState
+# Check for required dependencies
+SKIP_TESTS = False
+SKIP_REASON = ""
+
+try:
+    import numpy as np
+    import wave
+    import webrtcvad  # Required for WebRtcVadDetector (used by CombinedVadDetector)
+    import torch  # Required for SileroVadDetector (used by CombinedVadDetector)
+    from src.Features.VoiceActivityDetection.Detectors import CombinedVadDetector
+    from src.Features.VoiceActivityDetection.Detectors.CombinedVadDetector import DetectionState
+except ImportError as e:
+    SKIP_TESTS = True
+    SKIP_REASON = f"Required dependency not available: {str(e)}"
+    print(f"Warning: {SKIP_REASON}")
+    traceback.print_exc()
 
 
 class CombinedVadDetectorTest(unittest.TestCase):
     """Test cases for CombinedVadDetector"""
+    
+    @classmethod
+    def setUpClass(cls):
+        if SKIP_TESTS:
+            raise unittest.SkipTest(SKIP_REASON)
 
     def setUp(self):
         """Set up the test environment"""
+        if SKIP_TESTS:
+            self.skipTest(SKIP_REASON)
         self.detector = CombinedVadDetector(
             webrtc_aggressiveness=2,
             silero_threshold=0.5,
@@ -49,7 +69,7 @@ class CombinedVadDetectorTest(unittest.TestCase):
         
         # Get the path to warmup audio for realistic test
         self.warmup_audio_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), 
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")),
             "RealtimeSTT", 
             "warmup_audio.wav"
         )

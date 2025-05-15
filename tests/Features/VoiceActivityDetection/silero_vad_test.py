@@ -8,21 +8,40 @@ including initialization, configuration, and speech detection.
 import os
 import sys
 import unittest
-import numpy as np
-import wave
+import traceback
 from io import BytesIO
 
 # Add the project root to Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
-from src.Features.VoiceActivityDetection.Detectors import SileroVadDetector
+# Check for required dependencies
+SKIP_TESTS = False
+SKIP_REASON = ""
+
+try:
+    import numpy as np
+    import wave
+    import torch  # Required for SileroVadDetector
+    from src.Features.VoiceActivityDetection.Detectors import SileroVadDetector
+except ImportError as e:
+    SKIP_TESTS = True
+    SKIP_REASON = f"Required dependency not available: {str(e)}"
+    print(f"Warning: {SKIP_REASON}")
+    traceback.print_exc()
 
 
 class SileroVadDetectorTest(unittest.TestCase):
     """Test cases for SileroVadDetector"""
+    
+    @classmethod
+    def setUpClass(cls):
+        if SKIP_TESTS:
+            raise unittest.SkipTest(SKIP_REASON)
 
     def setUp(self):
         """Set up the test environment"""
+        if SKIP_TESTS:
+            self.skipTest(SKIP_REASON)
         self.detector = SileroVadDetector(
             threshold=0.5,
             sample_rate=16000,
@@ -41,7 +60,7 @@ class SileroVadDetectorTest(unittest.TestCase):
         
         # Get the path to warmup audio for realistic test
         self.warmup_audio_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), 
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")),
             "RealtimeSTT", 
             "warmup_audio.wav"
         )
