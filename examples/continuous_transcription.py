@@ -13,6 +13,36 @@ and real-time transcription. It:
 Press Ctrl+C to stop recording and exit.
 """
 
+# Clear Python cache to ensure we use the latest code
+import sys
+import importlib
+importlib.invalidate_caches()
+
+# Clear any stale pyc files
+if __name__ == "__main__":
+    import os
+    import re
+    
+    # Get the project root directory
+    project_root = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    
+    # Function to clean up pyc files
+    def clean_pyc_files(directory):
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                if file.endswith(".pyc"):
+                    os.remove(os.path.join(root, file))
+            
+            # Clean up __pycache__ directories
+            if "__pycache__" in dirs:
+                pycache_dir = os.path.join(root, "__pycache__")
+                for file in os.listdir(pycache_dir):
+                    os.remove(os.path.join(pycache_dir, file))
+    
+    # Clean up the necessary directories
+    clean_pyc_files(os.path.join(project_root, "src"))
+    clean_pyc_files(os.path.join(project_root, "examples"))
+
 import os
 import sys
 import time
