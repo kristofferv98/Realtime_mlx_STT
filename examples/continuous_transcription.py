@@ -251,22 +251,27 @@ class ContinuousTranscriptionApp:
         logger.info("Starting continuous transcription...")
         
         # If no device specified, list available devices
-        devices_result = AudioCaptureModule.list_devices(self.command_dispatcher)
-        available_devices = devices_result.get('devices', [])
+        available_devices = AudioCaptureModule.list_devices(self.command_dispatcher)
+        # Make sure available_devices is a list
+        if not isinstance(available_devices, list):
+            available_devices = []
         
         if self.device_index is None:
             # Print available devices for user information
             logger.info("Available audio devices:")
             for device in available_devices:
-                logger.info(f"  [{device['index']}]: {device['name']}")
+                device_id = device.get('device_id', device.get('index', 0))
+                device_name = device.get('name', 'Unknown Device')
+                logger.info(f"  [{device_id}]: {device_name}")
             
-            # Use default device (usually index 0)
+            # Use default device (usually device_id 0 or the first one in the list)
             default_device = next((d for d in available_devices if d.get('is_default', False)), 
                                  available_devices[0] if available_devices else None)
             
             if default_device:
-                self.device_index = default_device['index']
-                logger.info(f"Using default device: [{self.device_index}]: {default_device['name']}")
+                self.device_index = default_device.get('device_id', default_device.get('index', 0))
+                device_name = default_device.get('name', 'Unknown Device')
+                logger.info(f"Using default device: [{self.device_index}]: {device_name}")
             else:
                 # Fall back to device 0 if no devices found
                 self.device_index = 0
