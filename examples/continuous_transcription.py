@@ -89,7 +89,9 @@ class ContinuousTranscriptionApp:
                 vad_aggressiveness: int = 2,
                 language: Optional[str] = None,
                 beam_size: int = 1,
-                quick_mode: bool = True):
+                quick_mode: bool = True,
+                keep_history: bool = True,
+                history_length: int = 10):
         """
         Initialize the application.
         
@@ -99,12 +101,19 @@ class ContinuousTranscriptionApp:
             language: Language code or None for auto-detection
             beam_size: Beam search size for transcription
             quick_mode: Whether to use quick/parallel mode for faster transcription
+            keep_history: Whether to maintain transcription history
+            history_length: Number of recent transcriptions to keep in history
         """
         self.device_index = device_index
         self.vad_aggressiveness = vad_aggressiveness
         self.language = language
         self.beam_size = beam_size
         self.quick_mode = quick_mode
+        
+        # Transcription history settings
+        self.keep_history = keep_history
+        self.history_length = history_length
+        self.transcription_history = []  # List of past transcribed segments
         
         # Stats
         self.speech_count = 0
@@ -132,19 +141,40 @@ class ContinuousTranscriptionApp:
             if is_final:
                 # Format the output nicely
                 logger.info(f"Transcription complete (confidence: {confidence:.2f})")
-                print("\n" + "-" * 80)
-                print(f"TRANSCRIPTION [{session_id[:8]}]:")
-                print(f"{text}")
-                print("-" * 80)
                 
-                # Store the result
-                self.transcriptions.append({
+                # Store the result in transcription list
+                result = {
                     'session_id': session_id,
                     'text': text,
                     'is_final': is_final,
                     'confidence': confidence,
                     'timestamp': time.time()
-                })
+                }
+                self.transcriptions.append(result)
+                
+                # Add to history if enabled
+                if self.keep_history and text.strip():  # Only add non-empty transcriptions
+                    self.transcription_history.append(text.strip())
+                    # Limit the history length
+                    if len(self.transcription_history) > self.history_length:
+                        self.transcription_history = self.transcription_history[-self.history_length:]
+                
+                # Get combined history text
+                history_text = ""
+                if self.keep_history and self.transcription_history:
+                    history_text = " ".join(self.transcription_history)
+                
+                # Print the transcription
+                print("\n" + "-" * 80)
+                print(f"TRANSCRIPTION [{session_id[:8]}]:")
+                print(f"{text}")
+                
+                # If history is maintained, show full history too
+                if self.keep_history and len(self.transcription_history) > 1:
+                    print("\nFULL HISTORY:")
+                    print(f"{history_text}")
+                    
+                print("-" * 80)
         
         # Track speech stats
         def on_speech_detected(confidence, timestamp, speech_id):
@@ -295,19 +325,33 @@ class ContinuousTranscriptionApp:
             chunk_size=512  # Use 512 samples (32ms) which is recommended for Silero VAD
         )
         
-        if not audio_result.get('success', False):
-            logger.error(f"Failed to start recording: {audio_result.get('error', 'Unknown error')}")
+        # Handle the return value properly based on its type
+        success = False
+        if isinstance(audio_result, bool):
+            success = audio_result
+        elif isinstance(audio_result, list) and audio_result:
+            # Non-empty list usually indicates success
+            success = True
+        
+        if not success:
+            logger.error(f"Failed to start recording")
             self.is_running = False
             return False
         
-        # Start VAD processing on the audio stream
-        vad_result = VadModule.start_detection(
+        # Start VAD processing by ensuring it's properly configured
+        # Convert aggressiveness (0-3) to sensitivity (0-1)
+        sensitivity = self.vad_aggressiveness / 3.0
+        
+        vad_result = VadModule.configure_vad(
             command_dispatcher=self.command_dispatcher,
-            aggressiveness=self.vad_aggressiveness
+            detector_type="combined",
+            sensitivity=sensitivity,
+            window_size=5,
+            min_speech_duration=0.25
         )
         
-        if not vad_result.get('success', False):
-            logger.error(f"Failed to start VAD: {vad_result.get('error', 'Unknown error')}")
+        if not vad_result:
+            logger.error(f"Failed to start VAD")
             # Stop recording since we couldn't start VAD
             AudioCaptureModule.stop_recording(self.command_dispatcher)
             self.is_running = False
@@ -323,11 +367,8 @@ class ContinuousTranscriptionApp:
         
         logger.info("Stopping continuous transcription...")
         
-        # Stop VAD processing
-        try:
-            VadModule.stop_detection(self.command_dispatcher)
-        except Exception as e:
-            logger.error(f"Error stopping VAD: {e}")
+        # No need to stop VAD processing - it's just listening to events
+        # The VAD will stop when audio stops sending events
         
         # Stop audio recording
         try:
@@ -343,6 +384,14 @@ class ContinuousTranscriptionApp:
         if self.speech_count > 0:
             logger.info(f"  Average speech duration: {self.total_duration / self.speech_count:.2f} seconds")
         logger.info(f"  Total transcriptions: {len(self.transcriptions)}")
+        
+        # Print full history if enabled
+        if self.keep_history and self.transcription_history:
+            full_history = " ".join(self.transcription_history)
+            print("\n" + "=" * 80)
+            print("FULL TRANSCRIPTION HISTORY:")
+            print(full_history)
+            print("=" * 80)
         
         self.is_running = False
 
@@ -362,6 +411,10 @@ def main():
                       help="Beam search size for transcription (default: 1)")
     parser.add_argument("--no-quick-mode", action="store_true", 
                       help="Disable quick mode (more accurate but slower)")
+    parser.add_argument("--no-history", action="store_true",
+                      help="Disable transcription history accumulation")
+    parser.add_argument("--history-length", type=int, default=10,
+                      help="Number of recent transcriptions to maintain in history (default: 10)")
     
     args = parser.parse_args()
     
@@ -371,7 +424,9 @@ def main():
         vad_aggressiveness=args.vad_aggressiveness,
         language=args.language,
         beam_size=args.beam_size,
-        quick_mode=not args.no_quick_mode
+        quick_mode=not args.no_quick_mode,
+        keep_history=not args.no_history,
+        history_length=args.history_length
     )
     
     app.initialize()
