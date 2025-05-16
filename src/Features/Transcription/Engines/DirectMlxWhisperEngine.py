@@ -329,6 +329,16 @@ def load_audio(file_path, sr=16000):
     Returns:
         mx.array: Audio data as mx.array
     """
+    logger = logging.getLogger(__name__)
+    logger.info(f"Loading audio from file: {file_path}")
+    
+    # TEMPORARY DEBUG: Extra file validation
+    import os
+    if not os.path.exists(file_path):
+        logger.error(f"Audio file does not exist: {file_path}")
+        # Return empty array instead of raising exception for debugging
+        return mx.array(np.zeros(1, dtype=np.float32))
+    
     try:
         # First try to use soundfile which is faster but might not support all formats
         import soundfile as sf
@@ -336,10 +346,15 @@ def load_audio(file_path, sr=16000):
         
         try:
             # Try soundfile first
+            logger.info(f"Loading with soundfile: {file_path}")
             audio_data, sample_rate = sf.read(file_path, dtype='float32')
+            
+            logger.info(f"Loaded audio: shape={audio_data.shape}, sample_rate={sample_rate}, "
+                      f"min={np.min(audio_data):.5f}, max={np.max(audio_data):.5f}")
             
             # Resample if needed
             if sample_rate != sr:
+                logger.info(f"Resampling from {sample_rate}Hz to {sr}Hz")
                 audio_data = librosa.resample(
                     audio_data,
                     orig_sr=sample_rate,
@@ -348,21 +363,30 @@ def load_audio(file_path, sr=16000):
                 
             # Convert to mono if stereo
             if len(audio_data.shape) > 1 and audio_data.shape[1] > 1:
+                logger.info(f"Converting from {audio_data.shape[1]} channels to mono")
                 audio_data = audio_data.mean(axis=1)
                 
         except Exception as e:
             # Fall back to librosa if soundfile fails
+            logger.warning(f"Soundfile failed ({str(e)}), falling back to librosa")
             audio_data, _ = librosa.load(file_path, sr=sr, mono=True)
+            logger.info(f"Loaded with librosa: shape={audio_data.shape}, "
+                      f"min={np.min(audio_data):.5f}, max={np.max(audio_data):.5f}")
             
         # Normalize
         max_val = np.max(np.abs(audio_data))
         if max_val > 0:
-            audio_data = audio_data / max_val
+            if max_val > 1.0:
+                logger.info(f"Normalizing audio (max_val={max_val:.5f})")
+                audio_data = audio_data / max_val
             
-        return mx.array(audio_data)
+        result_array = mx.array(audio_data)
+        logger.info(f"Converted to MLX array: shape={result_array.shape}")
+        return result_array
         
     except Exception as e:
         # Last resort: try ffmpeg style loading
+        logger.warning(f"Standard loading failed ({str(e)}), trying ffmpeg")
         try:
             from subprocess import CalledProcessError, run
             
@@ -370,9 +394,12 @@ def load_audio(file_path, sr=16000):
                        "-f", "s16le", "-ac", "1", "-acodec", "pcm_s16le",
                        "-ar", str(sr), "-"], capture_output=True, check=True).stdout
                        
-            return mx.array(np.frombuffer(out, np.int16)).flatten().astype(mx.float32) / 32768.0
+            result = mx.array(np.frombuffer(out, np.int16)).flatten().astype(mx.float32) / 32768.0
+            logger.info(f"Loaded with ffmpeg: shape={result.shape}")
+            return result
             
         except Exception as ffmpeg_error:
+            logger.error(f"Failed to load audio: {str(e)}, ffmpeg error: {str(ffmpeg_error)}")
             raise RuntimeError(f"Failed to load audio: {str(e)}, ffmpeg error: {str(ffmpeg_error)}")
 
 
@@ -388,10 +415,30 @@ def log_mel_spectrogram(audio, n_mels=128, padding=0):
     Returns:
         mx.array: Log-mel spectrogram
     """
+    logger = logging.getLogger(__name__)
+    
+    # TEMPORARY DEBUG: Log detailed information about input
+    if isinstance(audio, str):
+        logger.info(f"log_mel_spectrogram processing file: {audio}")
+        try:
+            import os
+            if os.path.exists(audio):
+                logger.info(f"File exists, size: {os.path.getsize(audio)} bytes")
+            else:
+                logger.warning(f"File does not exist: {audio}")
+        except Exception as e:
+            logger.error(f"Error checking file: {e}")
+    elif isinstance(audio, np.ndarray):
+        logger.info(f"log_mel_spectrogram input array: shape={audio.shape}, dtype={audio.dtype}")
+        logger.info(f"Array stats: min={np.min(audio):.5f}, max={np.max(audio):.5f}, "
+                   f"mean={np.mean(audio):.5f}, has_data={not np.allclose(audio, 0)}")
+    else:
+        logger.info(f"log_mel_spectrogram input type: {type(audio)}")
+    
     # Handle empty inputs - return minimal valid spectrogram
     if isinstance(audio, np.ndarray) and (audio.size == 0 or np.all(audio == 0)):
         # Return minimal spectrogram with correct dimensions
-        logging.getLogger(__name__).warning("Empty audio data provided to log_mel_spectrogram")
+        logger.warning("Empty audio data provided to log_mel_spectrogram")
         return mx.zeros((1, n_mels))
     
     if isinstance(audio, str):
@@ -690,6 +737,24 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                 return
                 
             start_time = time.time()
+            
+            # TEMPORARY DEBUG: Log information about the audio
+            if isinstance(audio, str):
+                self.logger.info(f"Processing audio file: {audio}")
+                # Copy the file to the project directory for debugging
+                try:
+                    import shutil
+                    import os.path
+                    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+                    debug_path = os.path.join(base_dir, "transcribed_audio.wav")
+                    shutil.copy2(audio, debug_path)
+                    self.logger.info(f"DEBUGGING: Copied audio file to: {debug_path}")
+                except Exception as e:
+                    self.logger.error(f"Error copying debug audio file: {e}")
+            else:
+                # For numpy arrays, log size and stats
+                self.logger.info(f"Processing audio array: shape={audio.shape if hasattr(audio, 'shape') else 'unknown'}, "
+                               f"type={type(audio).__name__}")
             
             # Process audio with simplified transcriber
             result = self.transcriber(

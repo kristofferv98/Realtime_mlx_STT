@@ -538,14 +538,56 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
         # Generate a session ID if none provided
         if not session_id:
             session_id = str(uuid.uuid4())
+            
+        # Save audio to a temporary WAV file
+        # This helps the transcription engine to handle the audio reliably
+        import tempfile
+        import numpy as np
+        import soundfile as sf
+        import os
         
-        # Process the complete speech segment
-        command = TranscribeAudioCommand(
-            audio_chunk=audio_reference,
-            session_id=session_id,
-            is_first_chunk=True,
-            is_last_chunk=True,
-            timestamp_ms=time.time() * 1000
-        )
+        # Create a unique filename for this segment
+        audio_id = session_id.split('-')[-1][:8]  # Use the last part of session ID
+        temp_dir = tempfile.gettempdir()
+        wav_path = os.path.join(temp_dir, f"speech_{audio_id}.wav")
+        
+        # Make sure audio is the right format
+        if isinstance(audio_reference, np.ndarray):
+            # TEMPORARY DEBUG: Also save a copy to the project base directory for debugging
+            try:
+                import os.path
+                base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+                debug_path = os.path.join(base_dir, "latest_speech.wav")
+                sf.write(debug_path, audio_reference, 16000, format='WAV', subtype='PCM_16')
+                self.logger.info(f"DEBUGGING: Saved audio to project dir: {debug_path}")
+            except Exception as e:
+                self.logger.error(f"Error saving debug audio file: {e}")
+            
+            # Save the audio data to a WAV file
+            try:
+                sf.write(wav_path, audio_reference, 16000, format='WAV', subtype='PCM_16')
+                self.logger.info(f"Saved audio to temporary file: {wav_path}")
+            except Exception as e:
+                self.logger.error(f"Error saving audio to temporary file: {e}")
+                return
+            
+            # Process the complete speech segment
+            command = TranscribeAudioCommand(
+                audio_chunk=wav_path,  # Pass the file path instead of the raw audio
+                session_id=session_id,
+                is_first_chunk=True,
+                is_last_chunk=True,
+                timestamp_ms=time.time() * 1000
+            )
+        else:
+            # Use the original audio reference if it's not a numpy array
+            # (though this should not happen with our current implementation)
+            command = TranscribeAudioCommand(
+                audio_chunk=audio_reference,
+                session_id=session_id,
+                is_first_chunk=True,
+                is_last_chunk=True,
+                timestamp_ms=time.time() * 1000
+            )
         
         self.handle(command)
