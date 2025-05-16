@@ -498,10 +498,20 @@ class Transcriber(nn.Module):
         Returns:
             str: Transcribed text
         """
+        logger = logging.getLogger(__name__)
         raw = log_mel_spectrogram(path_audio).astype(mx.float16)
         sot = mx.array([[50258, 50360, 50365]]) if any_lang else mx.array([[50258, 50259, 50360, 50365]])
         self.len_sot = sot.shape[-1]
-        txt = self.parallel(raw, sot) if quick else self.recurrent(raw, sot)
+        
+        # For short audio segments (common in VAD-triggered events), always use recurrent mode
+        # This provides better results for short utterances
+        if raw.shape[0] < 3000:
+            logger.info(f"Short audio segment detected ({raw.shape[0]} frames) - forcing recurrent mode")
+            txt = self.recurrent(raw, sot)
+        else:
+            # For longer segments, use the specified mode
+            txt = self.parallel(raw, sot) if quick else self.recurrent(raw, sot)
+            
         return txt
     
     def recurrent(self, raw, sot):

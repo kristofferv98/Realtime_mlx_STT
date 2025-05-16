@@ -73,9 +73,22 @@ class DirectTranscriptionManager:
             return {"error": "Transcription engine not running"}
         
         try:
-            # Apply any options to engine configuration
-            if options:
-                self.engine.configure(options)
+            # Create a copy of options to avoid modifying the original
+            engine_options = dict(options or {})
+            
+            # Special handling for short audio segments from VAD
+            import numpy as np
+            if isinstance(audio_data, np.ndarray):
+                if audio_data.shape[0] < 8000:  # Less than 0.5 sec at 16kHz
+                    self.logger.info(f"Short audio detected ({audio_data.shape[0]} samples) - using recurrent mode")
+                    engine_options['quick_mode'] = False
+            elif isinstance(audio_data, str) and is_first_chunk and is_last_chunk:
+                # For complete files, the engine will handle mode selection based on content length
+                pass
+            
+            # Apply options to engine configuration
+            if engine_options:
+                self.engine.configure(engine_options)
             
             # Process based on chunk type
             if is_first_chunk and is_last_chunk:
@@ -86,7 +99,8 @@ class DirectTranscriptionManager:
                 self.engine.add_audio_chunk(audio_data, is_last=is_last_chunk)
             
             # Wait for and return result
-            result = self.engine.get_result(timeout=options.get('timeout', 60.0) if options else 60.0)
+            timeout = engine_options.get('timeout', 60.0)
+            result = self.engine.get_result(timeout=timeout)
             if result:
                 return result
             else:
