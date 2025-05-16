@@ -152,11 +152,13 @@ class ContinuousTranscriptionApp:
                        f"avg: {avg_duration:.2f}s)")
         
         # Set up the recording state handler
-        def on_recording_state_changed(is_recording, device_info, source_id):
+        def on_recording_state_changed(previous_state, current_state):
             """Handle recording state changes."""
-            self.is_recording = is_recording
-            if is_recording:
-                logger.info(f"Recording started on device: {device_info['name']}")
+            self.is_recording = current_state.is_recording
+            if current_state.is_recording:
+                logger.info(f"Recording state changed: {previous_state} -> {current_state}")
+                if hasattr(current_state, 'device_info') and current_state.device_info:
+                    logger.info(f"Recording on device: {current_state.device_info.get('name', 'Unknown')}")
             else:
                 logger.info("Recording stopped")
         
@@ -176,11 +178,19 @@ class ContinuousTranscriptionApp:
             event_bus=self.event_bus
         )
         
+        # Register VAD module
         self.vad_handler = VadModule.register(
             command_dispatcher=self.command_dispatcher,
             event_bus=self.event_bus,
-            default_detector="combined",
-            default_aggressiveness=self.vad_aggressiveness
+            default_detector="combined"
+        )
+        
+        # Configure VAD with the desired aggressiveness
+        VadModule.configure_vad(
+            command_dispatcher=self.command_dispatcher,
+            detector_type="combined",
+            sensitivity=self.vad_aggressiveness / 3.0,  # Convert 0-3 scale to 0-1 scale
+            window_size=5
         )
         
         self.transcription_handler = TranscriptionModule.register(
