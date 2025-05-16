@@ -74,7 +74,15 @@ from src.Features.Transcription.TranscriptionModule import TranscriptionModule
 
 
 class ContinuousTranscriptionApp:
-    """Main application for continuous transcription with VAD."""
+    """
+    Main application for continuous transcription with VAD.
+    
+    Important note about chunk sizes:
+    Silero VAD models were trained using specific chunk sizes:
+    - For 16kHz sample rate: 512, 1024, or 1536 samples
+    - For 8kHz sample rate: 256, 512, or 768 samples
+    Using other values may reduce the model's accuracy.
+    """
     
     def __init__(self, 
                 device_index: Optional[int] = None,
@@ -269,7 +277,7 @@ class ContinuousTranscriptionApp:
             command_dispatcher=self.command_dispatcher,
             device_id=self.device_index,
             sample_rate=16000,  # 16kHz required for VAD and transcription
-            chunk_size=480  # 30ms chunks at 16kHz = 480 samples
+            chunk_size=512  # Use 512 samples (32ms) which is recommended for Silero VAD
         )
         
         if not audio_result.get('success', False):
