@@ -154,13 +154,20 @@ class ContinuousTranscriptionApp:
         # Set up the recording state handler
         def on_recording_state_changed(previous_state, current_state):
             """Handle recording state changes."""
-            self.is_recording = current_state.is_recording
-            if current_state.is_recording:
-                logger.info(f"Recording state changed: {previous_state} -> {current_state}")
-                if hasattr(current_state, 'device_info') and current_state.device_info:
-                    logger.info(f"Recording on device: {current_state.device_info.get('name', 'Unknown')}")
-            else:
+            from src.Features.AudioCapture.Events.RecordingStateChangedEvent import RecordingState
+            
+            # Update recording state
+            self.is_recording = (current_state == RecordingState.RECORDING)
+            
+            # Log state change
+            logger.info(f"Recording state changed: {previous_state.name} -> {current_state.name}")
+            
+            if current_state == RecordingState.RECORDING:
+                logger.info(f"Recording started on device ID: {self.device_index}")
+            elif current_state == RecordingState.STOPPED:
                 logger.info("Recording stopped")
+            elif current_state == RecordingState.ERROR:
+                logger.error("Recording error occurred")
         
         # Register the handlers with the event bus
         TranscriptionModule.on_transcription_updated(self.event_bus, on_transcription_updated)
@@ -236,25 +243,33 @@ class ContinuousTranscriptionApp:
         logger.info("Starting continuous transcription...")
         
         # If no device specified, list available devices
-        available_devices = AudioCaptureModule.list_devices(self.command_dispatcher)
+        devices_result = AudioCaptureModule.list_devices(self.command_dispatcher)
+        available_devices = devices_result.get('devices', [])
+        
         if self.device_index is None:
             # Print available devices for user information
             logger.info("Available audio devices:")
-            for idx, device in enumerate(available_devices):
-                logger.info(f"  [{idx}]: {device['name']}")
+            for device in available_devices:
+                logger.info(f"  [{device['index']}]: {device['name']}")
             
             # Use default device (usually index 0)
-            self.device_index = 0
-            logger.info(f"Using default device: [{self.device_index}]: "
-                       f"{available_devices[self.device_index]['name']}")
+            default_device = next((d for d in available_devices if d.get('is_default', False)), 
+                                 available_devices[0] if available_devices else None)
+            
+            if default_device:
+                self.device_index = default_device['index']
+                logger.info(f"Using default device: [{self.device_index}]: {default_device['name']}")
+            else:
+                # Fall back to device 0 if no devices found
+                self.device_index = 0
+                logger.warning(f"No devices found. Trying to use device index {self.device_index}")
         
         # Start recording with the selected device
         audio_result = AudioCaptureModule.start_recording(
             command_dispatcher=self.command_dispatcher,
-            device_index=self.device_index,
+            device_id=self.device_index,
             sample_rate=16000,  # 16kHz required for VAD and transcription
-            channels=1,  # Mono audio
-            chunk_duration_ms=30  # 30ms chunks recommended for VAD
+            chunk_size=480  # 30ms chunks at 16kHz = 480 samples
         )
         
         if not audio_result.get('success', False):
