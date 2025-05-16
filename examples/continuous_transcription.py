@@ -41,6 +41,8 @@ if __name__ == "__main__":
     
     # Clean up the necessary directories
     clean_pyc_files(os.path.join(project_root, "src"))
+    # Extra cleaning of critical modules
+    clean_pyc_files(os.path.join(project_root, "src/Features/VoiceActivityDetection"))
     clean_pyc_files(os.path.join(project_root, "examples"))
 
 import os
