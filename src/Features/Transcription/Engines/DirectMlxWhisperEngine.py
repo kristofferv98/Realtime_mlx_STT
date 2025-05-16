@@ -638,8 +638,8 @@ class Transcriber(nn.Module):
             raw = raw[:(raw.shape[0]//3000)*3000].reshape(-1, 3000, 128)
             logger.info(f"Reshaped spectrogram to {raw.shape}")
         
-        # Safety check to prevent extremely large inputs
-        assert raw.shape[0] < 360, f"Input too large: {raw.shape}"
+        # Safety check to prevent extremely large inputs - increased limit from 360 to 1000
+        assert raw.shape[0] < 1000, f"Input too large: {raw.shape}"
         
         # If we have no valid chunks (though this shouldn't happen now), return empty string
         if raw.shape[0] == 0:
@@ -860,7 +860,7 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                 
             start_time = time.time()
             
-            # TEMPORARY DEBUG: Log information about the audio
+            # ENHANCED DEBUG: Log detailed information about the audio
             if isinstance(audio, str):
                 self.logger.info(f"Processing audio file: {audio}")
                 # Copy the file to the project directory for debugging
@@ -873,10 +873,32 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                     self.logger.info(f"DEBUGGING: Copied audio file to: {debug_path}")
                 except Exception as e:
                     self.logger.error(f"Error copying debug audio file: {e}")
+            elif isinstance(audio, np.ndarray):
+                # For numpy arrays, log detailed information
+                duration_seconds = len(audio) / self.sample_rate if self.sample_rate > 0 else 0
+                expected_mel_frames = int(duration_seconds * 100)  # ~100 frames per second
+                
+                self.logger.info(f"Processing audio array: shape={audio.shape}, samples={len(audio)}, "
+                               f"duration={duration_seconds:.2f}s, expected_mel_frames={expected_mel_frames}")
+                
+                # Log audio statistics for debugging
+                if audio.size > 0:
+                    self.logger.info(f"Audio stats: min={np.min(audio):.4f}, max={np.max(audio):.4f}, "
+                                   f"mean={np.mean(audio):.4f}, non_zero={np.count_nonzero(audio)}")
+                    
+                # Save a copy of the audio chunk for debugging
+                try:
+                    import soundfile as sf
+                    import os.path
+                    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+                    debug_path = os.path.join(base_dir, "latest_speech.wav")
+                    sf.write(debug_path, audio, self.sample_rate)
+                    self.logger.info(f"DEBUGGING: Saved audio chunk to: {debug_path}")
+                except Exception as e:
+                    self.logger.error(f"Error saving debug audio chunk: {e}")
             else:
-                # For numpy arrays, log size and stats
-                self.logger.info(f"Processing audio array: shape={audio.shape if hasattr(audio, 'shape') else 'unknown'}, "
-                               f"type={type(audio).__name__}")
+                # For other types
+                self.logger.info(f"Processing audio of type: {type(audio).__name__}")
             
             # Process audio with simplified transcriber
             result = self.transcriber(

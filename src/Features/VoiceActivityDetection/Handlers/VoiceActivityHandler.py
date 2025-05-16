@@ -7,14 +7,20 @@ like detecting speech and configuring VAD parameters.
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, Union, Type, cast
+from typing import Any, Dict, List, Optional, Union, Type, cast, Deque
+from collections import deque
 
+# Core imports
 from src.Core.Common.Interfaces.command_handler import ICommandHandler
 from src.Core.Commands.command import Command
 from src.Core.Events.event_bus import IEventBus
 from src.Core.Common.Interfaces.voice_activity_detector import IVoiceActivityDetector
+
+# Cross-feature dependencies
 from src.Features.AudioCapture.Events.AudioChunkCapturedEvent import AudioChunkCapturedEvent
 from src.Features.AudioCapture.Models.AudioChunk import AudioChunk
+
+# Feature-specific imports
 from src.Features.VoiceActivityDetection.Commands.DetectVoiceActivityCommand import DetectVoiceActivityCommand
 from src.Features.VoiceActivityDetection.Commands.ConfigureVadCommand import ConfigureVadCommand
 from src.Features.VoiceActivityDetection.Events.SpeechDetectedEvent import SpeechDetectedEvent
@@ -63,8 +69,8 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         self.current_speech_id = ""
         self.speech_start_time = 0.0
         self.last_audio_timestamp = 0.0
-        self.speech_buffer = []  # Buffer to hold speech audio chunks
-        self.buffer_limit = 100  # Maximum number of chunks to buffer
+        self.speech_buffer: Deque[AudioChunk] = deque(maxlen=500)  # Buffer with automatic size limiting - increased for longer utterances
+        self.buffer_limit = 500  # Maximum number of chunks to buffer (increased from 100 to 500)
         
         # Register for audio events
         self.event_bus.subscribe(AudioChunkCapturedEvent, self._on_audio_chunk_captured)
@@ -211,23 +217,15 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         audio_chunk = event.audio_chunk
         self.last_audio_timestamp = audio_chunk.timestamp
         
-        # Create and handle a detect command
-        command = DetectVoiceActivityCommand(
-            audio_chunk=audio_chunk,
-            detector_type=self.active_detector_name,
-            return_confidence=True
-        )
-        
         try:
-            result = self._handle_detect_voice_activity(command)
+            # Skip using the command object entirely and call the detector directly
+            detector = self._get_detector(self.active_detector_name)
             
-            # Extract result values
-            if isinstance(result, dict):
-                is_speech = result['is_speech']
-                confidence = result['confidence']
-            else:
-                is_speech = result
-                confidence = 0.5  # Default confidence if not available
+            # Detect speech directly
+            is_speech, confidence = detector.detect_with_confidence(
+                audio_data=audio_chunk.raw_data, 
+                sample_rate=audio_chunk.sample_rate
+            )
             
             # Handle state transitions
             self._update_speech_state(is_speech, confidence, audio_chunk)
@@ -251,7 +249,7 @@ class VoiceActivityHandler(ICommandHandler[Any]):
             self.in_speech = True
             self.speech_start_time = current_time
             self.current_speech_id = str(time.time_ns())
-            self.speech_buffer = [audio_chunk]
+            self.speech_buffer = deque([audio_chunk], maxlen=self.buffer_limit)
             
             # Publish speech detected event
             self.event_bus.publish(SpeechDetectedEvent(
@@ -265,31 +263,67 @@ class VoiceActivityHandler(ICommandHandler[Any]):
             
         # Continued speech
         elif is_speech and self.in_speech:
-            # Add to speech buffer
+            # Add to speech buffer (deque automatically handles size limiting)
             self.speech_buffer.append(audio_chunk)
-            
-            # Limit buffer size
-            if len(self.speech_buffer) > self.buffer_limit:
-                self.speech_buffer.pop(0)
                 
         # Transition from speech to silence
         elif not is_speech and self.in_speech:
             self.in_speech = False
             speech_duration = current_time - self.speech_start_time
             
-            # Publish silence detected event
+            # Convert speech buffer to numpy array for transcription
+            # First, extract raw data from each audio chunk in the buffer
+            import numpy as np
+            
+            if len(self.speech_buffer) > 0:
+                try:
+                    # First check if all arrays have the same shape
+                    raw_data_list = []
+                    for chunk in self.speech_buffer:
+                        # Use the to_float32 method to get normalized numpy array
+                        chunk_data = chunk.to_float32()
+                        if chunk_data is not None and chunk_data.size > 0:
+                            # Ensure it's at least 1D
+                            if chunk_data.ndim == 0:
+                                chunk_data = np.array([chunk_data.item()], dtype=np.float32)
+                            raw_data_list.append(chunk_data)
+                    
+                    if raw_data_list:
+                        # Combine all valid audio chunks into a single numpy array
+                        audio_data = np.concatenate(raw_data_list)
+                        
+                        # Ensure the array is the right type and normalized
+                        if audio_data.dtype != np.float32:
+                            audio_data = audio_data.astype(np.float32)
+                        
+                        # Normalize if not already in [-1, 1] range
+                        max_val = np.max(np.abs(audio_data))
+                        if max_val > 0 and max_val > 1.0:
+                            audio_data = audio_data / max_val
+                    else:
+                        # No valid chunks found
+                        audio_data = np.array([0.0], dtype=np.float32)  # Create a single sample silent array
+                except Exception as e:
+                    self.logger.error(f"Error processing speech buffer: {e}")
+                    # Create a fallback array
+                    audio_data = np.array([0.0], dtype=np.float32)  # Create a single sample silent array
+            else:
+                # Empty buffer case - create an empty array with at least one sample
+                audio_data = np.array([0.0], dtype=np.float32)
+            
+            # Publish silence detected event with the numpy array
             self.event_bus.publish(SilenceDetectedEvent(
                 speech_duration=speech_duration,
                 audio_timestamp=audio_chunk.timestamp,
                 speech_start_time=self.speech_start_time,
                 speech_end_time=current_time,
-                audio_reference=self.speech_buffer,
+                audio_reference=audio_data,
                 speech_id=self.current_speech_id
             ))
             self.logger.debug(f"Speech ended, duration: {speech_duration:.2f}s")
             
             # Clear speech buffer
-            self.speech_buffer = []
+            self.speech_buffer = deque(maxlen=self.buffer_limit)
     
     def cleanup(self) -> None:
         """
@@ -305,4 +339,28 @@ class VoiceActivityHandler(ICommandHandler[Any]):
             detector.cleanup()
         
         # Clear buffers
-        self.speech_buffer = []
+        self.speech_buffer.clear()
+        
+    def get_buffer_duration(self) -> float:
+        """
+        Get the total duration of audio in the speech buffer.
+        
+        Returns:
+            float: Duration in seconds
+        """
+        return sum(chunk.get_duration() for chunk in self.speech_buffer)
+        
+    def set_buffer_limit(self, max_chunks: int) -> None:
+        """
+        Set the maximum number of audio chunks to buffer.
+        
+        Args:
+            max_chunks: Maximum number of chunks
+        """
+        if max_chunks < 1:
+            raise ValueError(f"Buffer limit must be at least 1, got {max_chunks}")
+            
+        # Create a new deque with the new limit
+        new_buffer = deque(self.speech_buffer, maxlen=max_chunks)
+        self.speech_buffer = new_buffer
+        self.buffer_limit = max_chunks

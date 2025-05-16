@@ -9,11 +9,14 @@ more accurate verification with Silero VAD.
 import logging
 import time
 from enum import Enum
-from typing import Dict, Any, Optional, Tuple, List, Union
+from typing import Dict, Any, Optional, Tuple, List, Union, TYPE_CHECKING
 
 import numpy as np
 
-from src.Core.Common.Interfaces.voice_activity_detector import IVoiceActivityDetector
+if TYPE_CHECKING:
+    from src.Core.Common.Interfaces.voice_activity_detector import IVoiceActivityDetector
+else:
+    from src.Core.Common.Interfaces.voice_activity_detector import IVoiceActivityDetector
 from src.Features.VoiceActivityDetection.Detectors.WebRtcVadDetector import WebRtcVadDetector
 from src.Features.VoiceActivityDetection.Detectors.SileroVadDetector import SileroVadDetector
 
@@ -44,8 +47,8 @@ class CombinedVadDetector(IVoiceActivityDetector):
                  sample_rate: int = 16000,
                  frame_duration_ms: int = 30,
                  speech_confirmation_frames: int = 3,
-                 silence_confirmation_frames: int = 5,
-                 speech_buffer_size: int = 10,
+                 silence_confirmation_frames: int = 15,  # Increased from 5 to 15 to allow longer natural pauses
+                 speech_buffer_size: int = 30,  # Increased from 10 to 30 for better speech segment tracking
                  webrtc_threshold: float = 0.6,
                  use_silero_confirmation: bool = True):
         """
