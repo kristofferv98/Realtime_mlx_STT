@@ -506,46 +506,158 @@ class Transcriber(nn.Module):
     
     def recurrent(self, raw, sot):
         """Process audio sequentially for higher accuracy."""
+        logger = logging.getLogger(__name__)
+        logger.info(f"recurrent: Input spectrogram shape={raw.shape}, length={len(raw)}")
+        
+        # Handle very short audio (less than 3000 frames)
+        if len(raw) < 3000:
+            logger.info(f"Short audio segment detected ({len(raw)} < 3000 samples), padding for processing")
+            
+            # Create padded version
+            padded_raw = mx.zeros((3000, raw.shape[1]))
+            padded_raw[:len(raw)] = raw
+            
+            # Process the single chunk
+            logger.info("Processing padded segment as a single chunk")
+            piece = self.step(padded_raw[None], sot)
+            
+            # Extract tokens
+            new_tok = piece.astype(mx.int32)
+            new_tok = [i for i in new_tok.tolist()[0] if i < 50257]
+            
+            if not new_tok:
+                logger.warning("No tokens generated for short audio segment")
+                return ""
+                
+            result = self.tokenizer.decode(new_tok)[0]
+            logger.info(f"Short audio transcription result: {len(result)} characters")
+            return result
+        
+        # Normal processing for longer audio
         new_tok, i = mx.zeros((1,0), dtype=mx.int32), 0
+        chunk_count = 0
+        
         while i+3000 < len(raw):
+            chunk_count += 1
+            logger.info(f"Processing chunk {chunk_count} starting at offset {i}")
+            
+            # Process current chunk
             piece = self.step(raw[i:i+3000][None], sot)
+            
+            # Determine next position
             arg_hop = mx.argmax(piece).item()
             hop = (piece[:,arg_hop].astype(mx.int32).item()-50365)*2
+            
+            # Add tokens to result
             new_tok = mx.concatenate([new_tok, piece[:,:arg_hop]], axis=-1)
+            
+            # Move to next chunk
             i += hop if hop > 0 else 3000
+            logger.info(f"Moving to offset {i}" + (" (via timestamp)" if hop > 0 else ""))
+        
+        # Handle any remaining audio (less than 3000 frames)
+        if i < len(raw) and len(raw) - i > 10:  # Only process if there's meaningful content left
+            chunk_count += 1
+            logger.info(f"Processing final chunk {chunk_count} with {len(raw) - i} frames")
+            
+            # Pad the final chunk to 3000 frames
+            padded_chunk = mx.zeros((3000, raw.shape[1]))
+            padded_chunk[:(len(raw) - i)] = raw[i:]
+            
+            # Process final chunk
+            piece = self.step(padded_chunk[None], sot)
+            
+            # Add tokens to result
+            arg_hop = mx.argmax(piece).item()
+            new_tok = mx.concatenate([new_tok, piece[:,:arg_hop]], axis=-1)
+        
+        # Extract valid tokens
         new_tok = [i for i in new_tok.astype(mx.int32).tolist()[0] if i < 50257]
+        logger.info(f"Generated {len(new_tok)} tokens from {chunk_count} chunks")
+        
         # Handle empty token list
         if not new_tok:
+            logger.warning("Empty token list after processing all chunks")
             return ""
-        return self.tokenizer.decode(new_tok)[0]
+            
+        # Decode to text
+        result = self.tokenizer.decode(new_tok)[0]
+        logger.info(f"Decoded to {len(result)} characters")
+        return result
     
     def parallel(self, raw, sot):
         """Process audio in parallel for faster processing."""
-        # Handle empty or small audio inputs
+        logger = logging.getLogger(__name__)
+        
+        # Log the raw audio spectrogram shape
+        logger.info(f"parallel: Input spectrogram shape={raw.shape}")
+        
+        # Special handling for short audio segments
         if raw.shape[0] < 3000:
-            # If we have too little data, reshape to expected dimensions but note we'll get empty output
-            raw = raw.reshape(-1, 3000, 128) if raw.shape[0] > 0 else mx.zeros((1, 3000, 128))
+            logger.info(f"Short audio segment detected ({raw.shape[0]} < 3000 samples), applying special handling")
+            
+            # For very short segments, we pad them to 3000 to ensure the model has enough context
+            # This helps the model handle short speech segments better
+            if raw.shape[0] > 0:
+                padding_needed = 3000 - raw.shape[0]
+                logger.info(f"Padding spectrogram with {padding_needed} frames")
+                
+                # Create padding (repeating the last frame or using zeros)
+                if raw.shape[0] > 10:  # If we have at least some real data, repeat the last few frames
+                    # Use the last 10 frames (or fewer if audio is shorter) and repeat them
+                    last_frames = raw[-min(10, raw.shape[0]):]
+                    padding = mx.concatenate([last_frames] * (padding_needed // last_frames.shape[0] + 1), axis=0)
+                    padding = padding[:padding_needed]
+                else:
+                    # Create zero padding if we have very little data
+                    padding = mx.zeros((padding_needed, raw.shape[1]))
+                
+                # Pad the original data
+                raw = mx.concatenate([raw, padding], axis=0)
+                logger.info(f"Padded spectrogram shape={raw.shape}")
+            else:
+                # If we have no data at all, create a minimal valid input
+                raw = mx.zeros((3000, 128))
+                logger.info("Created minimal valid input spectrogram")
+            
+            # Reshape to the expected 3D format with batch dimension
+            raw = raw.reshape(-1, 3000, 128)
         else:
+            # Normal processing for longer audio
+            # Ensure input is multiple of 3000 and reshape
             raw = raw[:(raw.shape[0]//3000)*3000].reshape(-1, 3000, 128)
+            logger.info(f"Reshaped spectrogram to {raw.shape}")
         
         # Safety check to prevent extremely large inputs
-        assert raw.shape[0] < 360
+        assert raw.shape[0] < 360, f"Input too large: {raw.shape}"
         
-        # If we have no valid chunks, return empty string
+        # If we have no valid chunks (though this shouldn't happen now), return empty string
         if raw.shape[0] == 0:
+            logger.warning("No valid chunks found after preprocessing")
             return ""
-            
+        
+        # Generate tokens
+        logger.info(f"Processing {raw.shape[0]} chunks with model")
         sot = mx.repeat(sot, raw.shape[0], 0)
         new_tok = self.step(raw, sot)
+        
+        # Extract token indices
         arg_hop = mx.argmax(new_tok, axis=-1).tolist()
         new_tok = [i[:a] for i,a in zip(new_tok.astype(mx.int32).tolist(),arg_hop)]
         new_tok = [i for i in sum(new_tok, []) if i < 50257]
         
+        # Log token count
+        logger.info(f"Generated {len(new_tok)} tokens")
+        
         # Handle empty token list
         if not new_tok:
+            logger.warning("Empty token list after processing")
             return ""
-            
-        return self.tokenizer.decode(new_tok)[0]
+        
+        # Decode tokens to text
+        result = self.tokenizer.decode(new_tok)[0]
+        logger.info(f"Decoded to {len(result)} characters")
+        return result
     
     def step(self, mel, txt):
         """Process a single step of transcription."""
