@@ -81,6 +81,10 @@ class Tokenizer:
         Returns:
             List of decoded strings
         """
+        # Handle empty lists to prevent "list index out of range" error
+        if not lol:
+            return [""]
+            
         if isinstance(lol[0], int):
             lol = [lol]
         return [self.encoding.decode(l) for l in lol]
@@ -384,6 +388,12 @@ def log_mel_spectrogram(audio, n_mels=128, padding=0):
     Returns:
         mx.array: Log-mel spectrogram
     """
+    # Handle empty inputs - return minimal valid spectrogram
+    if isinstance(audio, np.ndarray) and (audio.size == 0 or np.all(audio == 0)):
+        # Return minimal spectrogram with correct dimensions
+        logging.getLogger(__name__).warning("Empty audio data provided to log_mel_spectrogram")
+        return mx.zeros((1, n_mels))
+    
     if isinstance(audio, str):
         # Load audio from file path
         audio = load_audio(audio)
@@ -399,6 +409,11 @@ def log_mel_spectrogram(audio, n_mels=128, padding=0):
     elif not isinstance(audio, mx.array):
         # Fallback for other types
         audio = mx.array(audio)
+    
+    # Handle empty mx arrays
+    if hasattr(audio, 'size') and audio.size == 0:
+        logging.getLogger(__name__).warning("Empty mx.array provided to log_mel_spectrogram")
+        return mx.zeros((1, n_mels))
         
     if padding > 0:
         audio = mx.pad(audio, (0, padding))
@@ -452,17 +467,37 @@ class Transcriber(nn.Module):
             new_tok = mx.concatenate([new_tok, piece[:,:arg_hop]], axis=-1)
             i += hop if hop > 0 else 3000
         new_tok = [i for i in new_tok.astype(mx.int32).tolist()[0] if i < 50257]
+        # Handle empty token list
+        if not new_tok:
+            return ""
         return self.tokenizer.decode(new_tok)[0]
     
     def parallel(self, raw, sot):
         """Process audio in parallel for faster processing."""
-        raw = raw[:(raw.shape[0]//3000)*3000].reshape(-1, 3000, 128)
+        # Handle empty or small audio inputs
+        if raw.shape[0] < 3000:
+            # If we have too little data, reshape to expected dimensions but note we'll get empty output
+            raw = raw.reshape(-1, 3000, 128) if raw.shape[0] > 0 else mx.zeros((1, 3000, 128))
+        else:
+            raw = raw[:(raw.shape[0]//3000)*3000].reshape(-1, 3000, 128)
+        
+        # Safety check to prevent extremely large inputs
         assert raw.shape[0] < 360
+        
+        # If we have no valid chunks, return empty string
+        if raw.shape[0] == 0:
+            return ""
+            
         sot = mx.repeat(sot, raw.shape[0], 0)
         new_tok = self.step(raw, sot)
         arg_hop = mx.argmax(new_tok, axis=-1).tolist()
         new_tok = [i[:a] for i,a in zip(new_tok.astype(mx.int32).tolist(),arg_hop)]
         new_tok = [i for i in sum(new_tok, []) if i < 50257]
+        
+        # Handle empty token list
+        if not new_tok:
+            return ""
+            
         return self.tokenizer.decode(new_tok)[0]
     
     def step(self, mel, txt):
@@ -635,6 +670,25 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
             is_final: Whether this is the final chunk of audio
         """
         try:
+            # Check for empty or invalid audio input
+            if isinstance(audio, np.ndarray) and (audio.size == 0 or np.all(audio == 0)):
+                self.logger.warning("Empty or silent audio chunk received, returning empty result")
+                with self.lock:
+                    empty_result = {
+                        "text": "",
+                        "is_final": is_final,
+                        "language": self.language,
+                        "processing_time": 0.0,
+                        "confidence": 0.0,
+                        "success": True,
+                        "info": "Empty or silent audio"
+                    }
+                    self.current_result = empty_result
+                    self.is_processing = False
+                    self.result_ready.set()
+                    self.result_queue.put(empty_result)
+                return
+                
             start_time = time.time()
             
             # Process audio with simplified transcriber
