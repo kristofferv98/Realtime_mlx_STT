@@ -27,7 +27,8 @@ class ConfigureVadCommand(Command):
         parameters: Additional detector-specific parameters
     """
     
-    detector_type: str
+    # Since Command already has default fields, we need to make all fields here have defaults too
+    detector_type: str = field(default=None)
     sensitivity: float = 0.5
     window_size: int = 5
     min_speech_duration: float = 0.25
@@ -35,7 +36,12 @@ class ConfigureVadCommand(Command):
     parameters: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):
+        """Validate fields and call parent init."""
         super().__post_init__()
+        
+        # Enforce required fields
+        if self.detector_type is None:
+            raise ValueError("detector_type is required for ConfigureVadCommand")
         
         # Validation checks
         if self.detector_type not in ['webrtc', 'silero', 'combined']:
