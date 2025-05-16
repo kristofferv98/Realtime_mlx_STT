@@ -27,7 +27,10 @@ class DetectVoiceActivityCommand(Command):
         options: Additional detector-specific options
     """
     
+    # Required arguments must come before optional ones
     audio_chunk: AudioChunk
+    
+    # Optional arguments with defaults
     sensitivity: Optional[float] = None
     detector_type: Optional[str] = None
     return_confidence: bool = False
