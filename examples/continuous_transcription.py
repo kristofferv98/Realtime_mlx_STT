@@ -251,10 +251,20 @@ class ContinuousTranscriptionApp:
         logger.info("Starting continuous transcription...")
         
         # If no device specified, list available devices
-        available_devices = AudioCaptureModule.list_devices(self.command_dispatcher)
-        # Make sure available_devices is a list
-        if not isinstance(available_devices, list):
-            available_devices = []
+        devices_list = AudioCaptureModule.list_devices(self.command_dispatcher)
+        
+        # The list_devices method returns a list that contains a list of device dicts
+        # Need to flatten the structure to get the actual device list
+        available_devices = []
+        if isinstance(devices_list, list):
+            # Handle nested list structure
+            if len(devices_list) > 0 and isinstance(devices_list[0], list):
+                available_devices = devices_list[0]
+            else:
+                # Try to use the outer list directly
+                available_devices = devices_list
+        
+        logger.debug(f"Found {len(available_devices)} audio devices")
         
         if self.device_index is None:
             # Print available devices for user information
