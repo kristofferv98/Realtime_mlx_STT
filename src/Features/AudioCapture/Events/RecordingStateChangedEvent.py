@@ -5,9 +5,11 @@ This event is published when the recording state changes, such as
 when recording starts, stops, or encounters an error.
 """
 
-from dataclasses import dataclass
 from typing import Optional, Dict, Any
+import uuid
+from datetime import datetime
 from enum import Enum, auto
+
 from src.Core.Events.event import Event
 
 
@@ -22,7 +24,6 @@ class RecordingState(Enum):
     ERROR = auto()
 
 
-@dataclass
 class RecordingStateChangedEvent(Event):
     """
     Event published when the recording state changes.
@@ -38,23 +39,23 @@ class RecordingStateChangedEvent(Event):
         metadata: Additional metadata about the recording
     """
     
-    # The previous recording state
-    previous_state: RecordingState
-    
-    # The current recording state
-    current_state: RecordingState
-    
-    # ID of the device being used for recording
-    device_id: int
-    
-    # Optional error message if state is ERROR
-    error_message: Optional[str] = None
-    
-    # Additional metadata
-    metadata: Dict[str, Any] = None
-    
-    def __post_init__(self):
-        """Initialize empty metadata dict if None."""
-        super().__post_init__()
-        if self.metadata is None:
-            self.metadata = {}
+    def __init__(self,
+                previous_state: RecordingState,
+                current_state: RecordingState,
+                device_id: int,
+                error_message: Optional[str] = None,
+                metadata: Dict[str, Any] = None,
+                id: Optional[str] = None,
+                timestamp: Optional[datetime] = None,
+                name: Optional[str] = None):
+        """Initialize the event with the required parameters."""
+        super().__init__(id=id, timestamp=timestamp, name=name)
+        
+        # Required parameters
+        self.previous_state = previous_state
+        self.current_state = current_state
+        self.device_id = device_id
+        
+        # Optional parameters
+        self.error_message = error_message
+        self.metadata = metadata if metadata is not None else {}

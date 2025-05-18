@@ -4,14 +4,14 @@ SpeechDetectedEvent for voice activity detection.
 This event is published when speech is detected in the audio stream.
 """
 
-from dataclasses import dataclass, field
 from typing import Optional, Any, Union
 import time
+import uuid
+from datetime import datetime
 
 from src.Core.Events.event import Event
 
 
-@dataclass
 class SpeechDetectedEvent(Event):
     """
     Event published when speech is detected in the audio stream.
@@ -28,14 +28,26 @@ class SpeechDetectedEvent(Event):
         speech_id: Unique identifier for this speech segment
     """
     
-    confidence: float
-    audio_timestamp: float = field(default_factory=time.time)
-    detector_type: str = "unknown"
-    audio_reference: Optional[Any] = None
-    speech_id: str = field(default_factory=lambda: str(time.time_ns()))
-    
-    def __post_init__(self):
-        super().__post_init__()
+    def __init__(self, 
+                confidence: float,
+                audio_timestamp: float = None,
+                detector_type: str = "unknown",
+                audio_reference: Optional[Any] = None, 
+                speech_id: str = None,
+                id: Optional[str] = None,
+                timestamp: Optional[datetime] = None,
+                name: Optional[str] = None):
+        """Initialize the event with the required parameters."""
+        super().__init__(id=id, timestamp=timestamp, name=name)
+        
+        # Required parameters
+        self.confidence = confidence
+        
+        # Parameters with defaults
+        self.audio_timestamp = audio_timestamp if audio_timestamp is not None else time.time()
+        self.detector_type = detector_type
+        self.audio_reference = audio_reference
+        self.speech_id = speech_id if speech_id is not None else str(time.time_ns())
         
         # Validate confidence level
         if not 0.0 <= self.confidence <= 1.0:
