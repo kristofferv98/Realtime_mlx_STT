@@ -69,6 +69,10 @@ class SileroVadDetector(IVoiceActivityDetector):
         self.min_silence_duration_ms = min_silence_duration_ms
         self.use_onnx = use_onnx
         
+        # RNN state for the ONNX model (128 is the state size used by Silero VAD)
+        self.h_state = np.zeros((2, 1, 128), dtype=np.float32)
+        self.c_state = np.zeros((2, 1, 128), dtype=np.float32)
+        
         # Initialize speech/silence tracking
         self.reset_state()
         
@@ -85,6 +89,12 @@ class SileroVadDetector(IVoiceActivityDetector):
         self.current_sample = 0
         self.speech_start = 0
         self.speech_end = 0
+        
+        # Reset RNN states
+        if hasattr(self, 'h_state'):
+            self.h_state = np.zeros((2, 1, 128), dtype=np.float32)
+        if hasattr(self, 'c_state'):
+            self.c_state = np.zeros((2, 1, 128), dtype=np.float32)
     
     def setup(self) -> bool:
         """
@@ -251,13 +261,22 @@ class SileroVadDetector(IVoiceActivityDetector):
         # Ensure proper shape for ONNX input
         tensor = audio_array.reshape(1, -1)
         
-        # Run ONNX inference
+        # Run ONNX inference with state inputs
         ort_inputs = {
             'input': tensor.astype(np.float32),
-            'sr': np.array([self.sample_rate], dtype=np.int64)
+            'sr': np.array([self.sample_rate], dtype=np.int64),
+            'h0': self.h_state,
+            'c0': self.c_state
         }
         
-        ort_outs = self.ort_session.run(None, ort_inputs)
+        # Outputs include speech probability, hn, and cn (updated states)
+        output_names = ['output', 'hn', 'cn']
+        ort_outs = self.ort_session.run(output_names, ort_inputs)
+        
+        # Update internal states for next inference
+        self.h_state = ort_outs[1]
+        self.c_state = ort_outs[2]
+        
         speech_prob = ort_outs[0][0].item()
         
         return speech_prob
