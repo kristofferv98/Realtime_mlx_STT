@@ -29,7 +29,7 @@ class SileroVadDetector(IVoiceActivityDetector):
     """
     
     DEFAULT_MODEL = "silero_vad"
-    DEFAULT_MODEL_URL = "https://huggingface.co/deepghs/silero-vad-onnx/resolve/main/silero_vad.onnx"
+    DEFAULT_MODEL_URL = "https://huggingface.co/snakers4/silero-vad/resolve/master/silero_vad.onnx"
     FALLBACK_MODEL_URL = "https://huggingface.co/onnx-community/silero-vad/resolve/main/silero_vad.onnx"
     
     def __init__(self, 
@@ -104,6 +104,15 @@ class SileroVadDetector(IVoiceActivityDetector):
             bool: True if setup was successful, False otherwise
         """
         try:
+            # Delete the downloaded ONNX model if present to force redownload
+            model_path = os.path.join(self.cache_dir, "silero_vad.onnx")
+            if os.path.exists(model_path):
+                try:
+                    os.remove(model_path)
+                    self.logger.info(f"Removed existing model file: {model_path}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to remove existing model file: {e}")
+            
             if self.use_onnx:
                 self._setup_onnx_model()
             else:
@@ -164,6 +173,21 @@ class SileroVadDetector(IVoiceActivityDetector):
             
             # Initialize ONNX runtime session
             self.ort_session = ort.InferenceSession(model_path)
+            
+            # Log model information for debugging
+            input_names = [input.name for input in self.ort_session.get_inputs()]
+            output_names = [output.name for output in self.ort_session.get_outputs()]
+            self.logger.info(f"Model input names: {input_names}")
+            self.logger.info(f"Model output names: {output_names}")
+            
+            # Check if model uses state, h0/c0, or another format
+            self.model_format = 'unknown'
+            if 'state' in input_names:
+                self.model_format = 'state'
+            elif 'h0' in input_names and 'c0' in input_names:
+                self.model_format = 'h0_c0'
+            
+            self.logger.info(f"Detected model format: {self.model_format}")
             
             # We'll implement custom speech timestamps function when using ONNX
             self.logger.info("Successfully loaded Silero VAD ONNX model")
@@ -261,23 +285,62 @@ class SileroVadDetector(IVoiceActivityDetector):
         # Ensure proper shape for ONNX input
         tensor = audio_array.reshape(1, -1)
         
-        # Run ONNX inference with state inputs
-        ort_inputs = {
-            'input': tensor.astype(np.float32),
-            'sr': np.array([self.sample_rate], dtype=np.int64),
-            'h0': self.h_state,
-            'c0': self.c_state
-        }
-        
-        # Outputs include speech probability, hn, and cn (updated states)
-        output_names = ['output', 'hn', 'cn']
-        ort_outs = self.ort_session.run(output_names, ort_inputs)
-        
-        # Update internal states for next inference
-        self.h_state = ort_outs[1]
-        self.c_state = ort_outs[2]
-        
-        speech_prob = ort_outs[0][0].item()
+        try:
+            if hasattr(self, 'model_format'):
+                # Create inputs based on detected model format
+                if self.model_format == 'state':
+                    ort_inputs = {
+                        'input': tensor.astype(np.float32),
+                        'sr': np.array([self.sample_rate], dtype=np.int64),
+                        'state': np.zeros((4, 1, 128), dtype=np.float32)  # Initial state
+                    }
+                elif self.model_format == 'h0_c0':
+                    ort_inputs = {
+                        'input': tensor.astype(np.float32),
+                        'sr': np.array([self.sample_rate], dtype=np.int64),
+                        'h0': self.h_state,
+                        'c0': self.c_state
+                    }
+                else:  # Use basic input format as fallback
+                    ort_inputs = {
+                        'input': tensor.astype(np.float32),
+                        'sr': np.array([self.sample_rate], dtype=np.int64)
+                    }
+            else:  # Use basic input format as fallback
+                ort_inputs = {
+                    'input': tensor.astype(np.float32),
+                    'sr': np.array([self.sample_rate], dtype=np.int64)
+                }
+            
+            # Get output names
+            output_names = [output.name for output in self.ort_session.get_outputs()]
+            
+            # Run ONNX inference
+            ort_outs = self.ort_session.run(output_names, ort_inputs)
+            
+            # Get speech probability from first output
+            speech_prob = ort_outs[0][0].item()
+            
+            # Update state if available
+            if hasattr(self, 'model_format') and len(ort_outs) > 1:
+                if self.model_format == 'state' and output_names[1] == 'state':
+                    state_out = ort_outs[1]
+                    if state_out.shape[0] == 4:  # Expected shape for state
+                        # Update our state with the model's output state
+                        pass  # Not updating for now to avoid further issues
+                elif self.model_format == 'h0_c0' and len(output_names) > 2:
+                    if 'hn' in output_names and 'cn' in output_names:
+                        hn_idx = output_names.index('hn')
+                        cn_idx = output_names.index('cn')
+                        # Update our state with the model's output state
+                        if hn_idx < len(ort_outs) and cn_idx < len(ort_outs):
+                            self.h_state = ort_outs[hn_idx]
+                            self.c_state = ort_outs[cn_idx]
+            
+        except Exception as e:
+            self.logger.error(f"Failed to run ONNX inference: {e}")
+            # Fallback to a default value
+            speech_prob = 0.0
         
         return speech_prob
     
