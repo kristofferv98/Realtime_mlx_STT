@@ -69,8 +69,8 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         self.current_speech_id = ""
         self.speech_start_time = 0.0
         self.last_audio_timestamp = 0.0
-        self.speech_buffer: Deque[AudioChunk] = deque(maxlen=500)  # Buffer with automatic size limiting - increased for longer utterances
-        self.buffer_limit = 500  # Maximum number of chunks to buffer (increased from 100 to 500)
+        self.speech_buffer: Deque[AudioChunk] = deque(maxlen=10000)  # Buffer with automatic size limiting - increased to handle 5+ minutes
+        self.buffer_limit = 10000  # Maximum number of chunks to buffer (increased to 10000 for 5+ minute speech)
         
         # Register for audio events
         self.event_bus.subscribe(AudioChunkCapturedEvent, self._on_audio_chunk_captured)

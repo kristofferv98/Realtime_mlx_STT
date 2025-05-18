@@ -47,8 +47,8 @@ class CombinedVadDetector(IVoiceActivityDetector):
                  sample_rate: int = 16000,
                  frame_duration_ms: int = 30,
                  speech_confirmation_frames: int = 3,
-                 silence_confirmation_frames: int = 15,  # Increased from 5 to 15 to allow longer natural pauses
-                 speech_buffer_size: int = 30,  # Increased from 10 to 30 for better speech segment tracking
+                 silence_confirmation_frames: int = 30,  # Increased to 30 to allow for longer pauses in extended speech
+                 speech_buffer_size: int = 100,  # Increased to 100 for better tracking of long speech segments
                  webrtc_threshold: float = 0.6,
                  use_silero_confirmation: bool = True):
         """

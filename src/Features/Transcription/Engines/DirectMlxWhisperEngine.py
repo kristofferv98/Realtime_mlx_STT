@@ -638,8 +638,8 @@ class Transcriber(nn.Module):
             raw = raw[:(raw.shape[0]//3000)*3000].reshape(-1, 3000, 128)
             logger.info(f"Reshaped spectrogram to {raw.shape}")
         
-        # Safety check to prevent extremely large inputs - increased limit from 360 to 1000
-        assert raw.shape[0] < 1000, f"Input too large: {raw.shape}"
+        # Safety check to prevent extremely large inputs - increased limit to allow 5+ minutes of speech
+        assert raw.shape[0] < 12000, f"Input too large: {raw.shape}"
         
         # If we have no valid chunks (though this shouldn't happen now), return empty string
         if raw.shape[0] == 0:
