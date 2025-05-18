@@ -29,7 +29,8 @@ class SileroVadDetector(IVoiceActivityDetector):
     """
     
     DEFAULT_MODEL = "silero_vad"
-    DEFAULT_MODEL_URL = "https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx"
+    DEFAULT_MODEL_URL = "https://huggingface.co/deepghs/silero-vad-onnx/resolve/main/silero_vad.onnx"
+    FALLBACK_MODEL_URL = "https://huggingface.co/onnx-community/silero-vad/resolve/main/silero_vad.onnx"
     
     def __init__(self, 
                  threshold: float = 0.5,
@@ -145,7 +146,11 @@ class SileroVadDetector(IVoiceActivityDetector):
             if not os.path.exists(model_path):
                 self.logger.info("Downloading Silero VAD ONNX model...")
                 import urllib.request
-                urllib.request.urlretrieve(self.DEFAULT_MODEL_URL, model_path)
+                try:
+                    urllib.request.urlretrieve(self.DEFAULT_MODEL_URL, model_path)
+                except Exception as e:
+                    self.logger.warning(f"Failed to download from primary URL: {e}, trying fallback URL")
+                    urllib.request.urlretrieve(self.FALLBACK_MODEL_URL, model_path)
             
             # Initialize ONNX runtime session
             self.ort_session = ort.InferenceSession(model_path)
