@@ -102,7 +102,7 @@ transcriber.cleanup()
 
 The repository includes several ready-to-use example scripts:
 
-1. **Continuous Transcription** - Captures and transcribes speech from your microphone:
+1. **Continuous Transcription** - Captures and transcribes speech from your microphone using MLX-optimized Whisper:
    ```bash
    python examples/continuous_transcription.py
    ```
@@ -119,12 +119,27 @@ The repository includes several ready-to-use example scripts:
    python examples/continuous_transcription_pasting.py --paste-mode full
    ```
 
-3. **File Transcription** - Transcribes audio from a file:
+3. **OpenAI Transcription** - Transcribes speech using OpenAI's cloud-based GPT-4o-transcribe model:
+   ```bash
+   # Install required dependencies
+   uv pip install -e ".[openai]"
+   
+   # Set your OpenAI API key
+   export OPENAI_API_KEY=your_api_key_here
+   
+   # Run with GPT-4o-transcribe (highest quality)
+   python examples/openai_transcription.py
+   
+   # Run with GPT-4o-mini-transcribe (faster, lower cost)
+   python examples/openai_transcription.py --model gpt-4o-mini-transcribe
+   ```
+
+4. **File Transcription** - Transcribes audio from a file:
    ```bash
    python examples/transcribe_file.py path/to/audio/file.mp3
    ```
 
-4. **Check Audio Devices** - Lists all available audio input devices:
+5. **Check Audio Devices** - Lists all available audio input devices:
    ```bash
    python examples/check_audio_devices.py
    ```

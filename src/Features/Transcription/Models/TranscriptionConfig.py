@@ -18,11 +18,14 @@ class TranscriptionConfig:
     including model selection, performance settings, and behavior options.
     """
     # Engine selection and identification
-    engine_type: str = "mlx_whisper"
-    model_name: str = "whisper-large-v3-turbo"
+    engine_type: str = "mlx_whisper"  # Options: "mlx_whisper", "openai"
+    model_name: str = "whisper-large-v3-turbo"  # For MLX: "whisper-large-v3-turbo", for OpenAI: "gpt-4o-transcribe" or "gpt-4o-mini-transcribe"
     
     # Language settings
     language: Optional[str] = None  # None means auto-detect
+    
+    # OpenAI API settings
+    openai_api_key: Optional[str] = None  # Will check environment variable OPENAI_API_KEY if None
     
     # Performance settings
     compute_type: Literal["default", "float16", "float32"] = "float16"
@@ -56,6 +59,7 @@ class TranscriptionConfig:
             "engine_type": self.engine_type,
             "model_name": self.model_name,
             "language": self.language,
+            "openai_api_key": self.openai_api_key,
             "compute_type": self.compute_type,
             "beam_size": self.beam_size,
             "streaming": self.streaming,
@@ -73,7 +77,7 @@ class TranscriptionConfig:
         known_fields = {
             k: v for k, v in config_dict.items() 
             if k in [
-                "engine_type", "model_name", "language", "compute_type", 
+                "engine_type", "model_name", "language", "openai_api_key", "compute_type", 
                 "beam_size", "streaming", "chunk_duration_ms", 
                 "chunk_overlap_ms", "realtime_factor", "max_context_length"
             ]

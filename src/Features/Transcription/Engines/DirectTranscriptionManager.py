@@ -9,6 +9,7 @@ import logging
 from typing import Dict, Any, Optional, Union
 
 from src.Features.Transcription.Engines.DirectMlxWhisperEngine import DirectMlxWhisperEngine
+from src.Features.Transcription.Engines.OpenAITranscriptionEngine import OpenAITranscriptionEngine
 
 
 class DirectTranscriptionManager:
@@ -24,13 +25,19 @@ class DirectTranscriptionManager:
         """Initialize the transcription manager."""
         self.logger = logging.getLogger(__name__)
         self.engine = None
+        self._engine_type = None
+        
+    @property
+    def engine_type(self) -> Optional[str]:
+        """Get the current engine type."""
+        return self._engine_type
     
     def start(self, engine_type: str = "mlx_whisper", engine_config: Optional[Dict[str, Any]] = None) -> bool:
         """
         Start the transcription engine with the specified engine type.
         
         Args:
-            engine_type: Type of transcription engine to use
+            engine_type: Type of transcription engine to use ('mlx_whisper' or 'openai')
             engine_config: Configuration for the transcription engine
             
         Returns:
@@ -41,12 +48,31 @@ class DirectTranscriptionManager:
         config = engine_config or {}
         
         try:
+            # Store engine type
+            self._engine_type = engine_type
+            
             # Initialize the appropriate engine based on type
             if engine_type == "mlx_whisper":
                 self.engine = DirectMlxWhisperEngine(**config)
-                return self.engine.start()
+                success = self.engine.start()
+                if not success:
+                    self._engine_type = None
+                return success
+            elif engine_type == "openai":
+                # Create OpenAI transcription engine with API key
+                self.engine = OpenAITranscriptionEngine(
+                    model_name=config.get("model_name", "gpt-4o-transcribe"),
+                    language=config.get("language"),
+                    api_key=config.get("openai_api_key"),
+                    streaming=config.get("streaming", True)
+                )
+                success = self.engine.start()
+                if not success:
+                    self._engine_type = None
+                return success
             else:
                 self.logger.error(f"Unsupported engine type: {engine_type}")
+                self._engine_type = None
                 return False
         except Exception as e:
             self.logger.error(f"Error starting transcription engine: {e}", exc_info=True)
@@ -138,17 +164,21 @@ class DirectTranscriptionManager:
             bool: True if engine was successfully stopped
         """
         if self.is_running():
-            self.logger.info("Stopping transcription engine")
+            self.logger.info(f"Stopping transcription engine (type: {self._engine_type})")
             
             try:
                 if hasattr(self.engine, 'cleanup'):
                     self.engine.cleanup()
                 
                 self.engine = None
+                self._engine_type = None
                 return True
                 
             except Exception as e:
                 self.logger.error(f"Error stopping transcription engine: {e}")
+                # Still reset engine reference even if cleanup fails
+                self.engine = None
+                self._engine_type = None
         
         return True  # Return True even if engine wasn't running
     

@@ -42,7 +42,8 @@ class TranscriptionModule:
                 event_bus: IEventBus,
                 default_engine: str = "mlx_whisper",
                 default_model: str = "whisper-large-v3-turbo",
-                default_language: Optional[str] = None) -> TranscriptionCommandHandler:
+                default_language: Optional[str] = None,
+                openai_api_key: Optional[str] = None) -> TranscriptionCommandHandler:
         """
         Register the Transcription feature with the system.
         
@@ -54,9 +55,10 @@ class TranscriptionModule:
         Args:
             command_dispatcher: The command dispatcher to register handlers with
             event_bus: The event bus for publishing/subscribing to events
-            default_engine: The default engine to use ('mlx_whisper' or 'remote')
-            default_model: The default model to use
+            default_engine: The default engine to use ('mlx_whisper' or 'openai')
+            default_model: The default model to use ('whisper-large-v3-turbo', 'gpt-4o-transcribe', etc.)
             default_language: Default language code or None for auto-detection
+            openai_api_key: API key for OpenAI services (required if using 'openai' engine)
             
         Returns:
             TranscriptionCommandHandler: The registered command handler
@@ -75,16 +77,29 @@ class TranscriptionModule:
         
         # Configure default engine
         try:
-            config_command = ConfigureTranscriptionCommand(
-                engine_type=default_engine,
-                model_name=default_model,
-                language=default_language
-            )
+            # Set up configuration
+            config_dict = {
+                "engine_type": default_engine,
+                "model_name": default_model,
+                "language": default_language
+            }
+            
+            # Add OpenAI API key if using the OpenAI engine
+            if default_engine == "openai" and openai_api_key:
+                config_dict["openai_api_key"] = openai_api_key
+            
+            config_command = ConfigureTranscriptionCommand(**config_dict)
             result = command_dispatcher.dispatch(config_command)
+            
             if result:
                 logger.info(f"Successfully configured {default_engine} engine with model {default_model}")
             else:
                 logger.warning(f"Failed to configure {default_engine} engine")
+                
+                # Check for common configuration issues
+                if default_engine == "openai" and not openai_api_key:
+                    logger.error("OpenAI engine requires an API key. Provide one via openai_api_key parameter or OPENAI_API_KEY environment variable.")
+            
         except Exception as e:
             logger.error(f"Error configuring default engine: {e}", exc_info=True)
         
@@ -96,28 +111,39 @@ class TranscriptionModule:
                  model_name: str = "whisper-large-v3-turbo",
                  language: Optional[str] = None,
                  streaming: bool = True,
+                 openai_api_key: Optional[str] = None,
                  **kwargs) -> bool:
         """
         Configure the transcription system.
         
         Args:
             command_dispatcher: The command dispatcher to use
-            engine_type: Type of transcription engine to use
-            model_name: Name of the model to use
+            engine_type: Type of transcription engine to use ('mlx_whisper' or 'openai')
+            model_name: Name of the model to use ('whisper-large-v3-turbo', 'gpt-4o-transcribe', etc.)
             language: Optional language code or None for auto-detection
             streaming: Whether to enable streaming mode
+            openai_api_key: Optional API key for OpenAI services (required if using 'openai' engine)
             **kwargs: Additional engine-specific parameters
             
         Returns:
             bool: True if configuration was successful
         """
-        command = ConfigureTranscriptionCommand(
-            engine_type=engine_type,
-            model_name=model_name,
-            language=language,
-            streaming=streaming,
-            options=kwargs
-        )
+        # Create command parameters
+        command_params = {
+            "engine_type": engine_type,
+            "model_name": model_name,
+            "language": language,
+            "streaming": streaming
+        }
+        
+        # Add OpenAI API key if provided
+        if engine_type == "openai" and openai_api_key:
+            command_params["openai_api_key"] = openai_api_key
+            
+        # Add any additional options
+        command_params["options"] = kwargs
+        
+        command = ConfigureTranscriptionCommand(**command_params)
         return command_dispatcher.dispatch(command)
     
     @staticmethod
