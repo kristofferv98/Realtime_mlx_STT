@@ -86,6 +86,10 @@ def main():
     
     # Create a special SilenceDetectedEvent handler that only processes events when wake word is active
     def conditional_silence_handler(event):
+        print(f"\nDebug - conditional_silence_handler called, is_wake_word_active: {is_wake_word_active}")
+        print(f"Debug - event has audio_reference: {hasattr(event, 'audio_reference')}")
+        print(f"Debug - audio_reference is not None: {hasattr(event, 'audio_reference') and event.audio_reference is not None}")
+        
         if is_wake_word_active and hasattr(event, 'audio_reference') and event.audio_reference is not None:
             # Process the complete speech segment with transcription
             try:
@@ -95,6 +99,7 @@ def main():
                 
                 # Use transcribe_audio with the audio reference
                 audio_data = event.audio_reference
+                print(f"Debug - audio_data type: {type(audio_data)}, shape/len: {getattr(audio_data, 'shape', len(audio_data) if hasattr(audio_data, '__len__') else 'unknown')}")
                 
                 result = TranscriptionModule.transcribe_audio(
                     command_dispatcher,
@@ -104,11 +109,17 @@ def main():
                     is_last_chunk=True
                 )
                 
+                print(f"Debug - transcription result: {result}")
+                
                 # Print the result directly
                 if result and "text" in result:
                     print(f"\n🎤 Final transcription: {result['text']} (confidence: {result.get('confidence', 0.0):.2f})")
+                else:
+                    print(f"\nWarning - Missing 'text' in result: {result}")
             except Exception as e:
                 print(f"Error transcribing speech: {e}")
+                import traceback
+                traceback.print_exc()
     
     # Register our special handler with the event bus
     event_bus.subscribe(SilenceDetectedEvent, conditional_silence_handler)
@@ -153,9 +164,21 @@ def main():
         
         if is_wake_word_active:
             print(f"Processing speech after wake word (duration: {speech_duration:.2f}s)")
+            print(f"Debug - on_silence_detected called, is_wake_word_active: {is_wake_word_active}, speech_id: {speech_id}")
             
-            # Reset wake word active flag after processing
-            is_wake_word_active = False
+            # IMPORTANT: We need to reset wake_word_active, but ONLY after transcription has been processed
+            # Reset it after a delay to allow the conditional handler to process first
+            def delayed_reset():
+                nonlocal is_wake_word_active
+                time.sleep(2)  # Give transcription time to process
+                print("Debug - Resetting is_wake_word_active to False now")
+                is_wake_word_active = False
+                
+            # Start a thread to reset the flag after a delay
+            import threading
+            reset_thread = threading.Thread(target=delayed_reset)
+            reset_thread.daemon = True
+            reset_thread.start()
             
             # The transcription part is handled by our conditional_silence_handler
             # which has direct access to the audio data
