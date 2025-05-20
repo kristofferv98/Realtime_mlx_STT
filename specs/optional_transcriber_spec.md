@@ -10,7 +10,7 @@ This specification outlines the implementation of OpenAI's GPT-4o-transcribe as 
 2. Support both the full `gpt-4o-transcribe` model and the lighter `gpt-4o-mini-transcribe` for different use cases
 3. Maintain complete compatibility with the existing audio pipeline and event system
 4. Support both real-time streaming transcription and batch transcription
-5. Provide graceful fallback to local model when internet connectivity is unavailable
+5. Allow explicit user choice between transcription engines without automatic fallbacks
 
 ## Design
 
@@ -147,9 +147,9 @@ class TranscriptionConfig:
     openai_model: str = "gpt-4o-transcribe"  # or "gpt-4o-mini-transcribe"
 ```
 
-#### Fallback Mechanism
+#### API Connectivity Verification
 
-The engine will include a fallback mechanism to switch to the local MLX-based model if the OpenAI API is unavailable:
+The engine will verify API connectivity and provide clear error messages if there are issues, but will not automatically fall back to local models:
 
 ```python
 def start(self) -> bool:
@@ -165,24 +165,11 @@ def start(self) -> bool:
             self.logger.info("Successfully connected to OpenAI API")
             return True
         else:
-            self.logger.warning(f"Failed to connect to OpenAI API: {response.status_code}")
-            self._activate_fallback()
-            return self.fallback_engine.start() if self.fallback_engine else False
+            self.logger.error(f"Failed to connect to OpenAI API: {response.status_code}")
+            return False
     except Exception as e:
         self.logger.error(f"Error connecting to OpenAI API: {e}")
-        self._activate_fallback()
-        return self.fallback_engine.start() if self.fallback_engine else False
-
-def _activate_fallback(self):
-    """Activate local model fallback."""
-    if not self.fallback_engine and self.enable_fallback:
-        self.logger.info("Activating local MLX Whisper fallback engine")
-        from src.Features.Transcription.Engines.DirectMlxWhisperEngine import DirectMlxWhisperEngine
-        self.fallback_engine = DirectMlxWhisperEngine(
-            model_name="whisper-large-v3-turbo",
-            language=self.language,
-            streaming=self.streaming
-        )
+        return False
 ```
 
 #### Audio Format Handling
@@ -266,8 +253,8 @@ parser.add_argument('--openai-model', type=str, default='gpt-4o-mini-transcribe'
      - Configuration file (~/.openai/config)
 
 3. **Error Handling:**
-   - Graceful fallback to local models on connectivity issues
-   - Appropriate error messages for authentication failures
+   - Clear error messaging for connectivity or authentication issues
+   - Appropriate handling of API errors and timeouts
    - Rate limiting handling with exponential backoff
 
 ## Security Considerations
@@ -286,7 +273,7 @@ parser.add_argument('--openai-model', type=str, default='gpt-4o-mini-transcribe'
 
 1. **Unit Tests:**
    - Mock OpenAI API responses for deterministic testing
-   - Test fallback mechanism with simulated connectivity failures
+   - Test error handling with simulated connectivity failures
    - Verify correct audio format conversion
 
 2. **Integration Tests:**
@@ -307,4 +294,4 @@ parser.add_argument('--openai-model', type=str, default='gpt-4o-mini-transcribe'
 
 ## Conclusion
 
-This implementation will provide users with a flexible choice between local MLX-optimized Whisper processing and OpenAI's cloud-based GPT-4o-transcribe, while maintaining all the existing functionality and architecture of the system. The design emphasizes reliability through fallback mechanisms and full compatibility with the current event-driven system.
+This implementation will provide users with a flexible choice between local MLX-optimized Whisper processing and OpenAI's cloud-based GPT-4o-transcribe, while maintaining all the existing functionality and architecture of the system. The design emphasizes user control through explicit engine selection and full compatibility with the current event-driven system.
