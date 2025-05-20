@@ -6,9 +6,11 @@ pattern for event handling in the system.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Type
+from typing import Any, Callable, Dict, List, Type, ForwardRef
 
-from ...Events.event import Event
+# Use forward reference for Event
+Event = ForwardRef('Event')
+
 
 
 class IEventBus(ABC):

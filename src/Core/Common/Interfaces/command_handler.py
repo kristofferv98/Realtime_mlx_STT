@@ -6,9 +6,10 @@ functionality in the system. It enables decoupling between command senders and h
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, TypeVar
+from typing import Any, Dict, Generic, TypeVar, ForwardRef
 
-from ...Commands.command import Command
+# Use forward reference for Command
+Command = ForwardRef('Command')
 
 # Generic type variable for the command handler result
 T = TypeVar('T')

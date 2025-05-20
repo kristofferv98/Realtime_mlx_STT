@@ -530,11 +530,20 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
             audio_reference: Audio data from the speech segment
             duration: Duration of the speech segment in seconds
         """
+        self.logger.info(f"Received silence detection event, speech duration: {duration:.2f}s")
+        
         # Check if audio reference is empty or None
         # Handle NumPy arrays specifically to avoid ambiguous truth value error
         if audio_reference is None or (hasattr(audio_reference, 'size') and audio_reference.size == 0):
+            self.logger.warning("Empty audio reference received, skipping transcription")
             return
         
+        # Skip extremely short speech segments (likely false positives)
+        # The 0.2 seconds threshold can be adjusted based on your needs
+        if duration < 0.2:
+            self.logger.warning(f"Speech segment too short ({duration:.2f}s < 0.2s), skipping transcription")
+            return
+            
         # Generate a session ID if none provided
         if not session_id:
             session_id = str(uuid.uuid4())
@@ -553,6 +562,17 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
         
         # Make sure audio is the right format
         if isinstance(audio_reference, np.ndarray):
+            # Log audio statistics for debugging
+            if audio_reference.size > 0:
+                self.logger.info(f"Audio stats: shape={audio_reference.shape}, "
+                               f"duration={len(audio_reference)/16000:.2f}s, "
+                               f"min={np.min(audio_reference):.4f}, max={np.max(audio_reference):.4f}, "
+                               f"mean={np.mean(audio_reference):.4f}, rms={np.sqrt(np.mean(np.square(audio_reference))):.4f}")
+                
+                # Log audio RMS for informational purposes only
+                rms = np.sqrt(np.mean(np.square(audio_reference)))
+                self.logger.info(f"Audio RMS energy level: {rms:.4f}")
+            
             # TEMPORARY DEBUG: Also save a copy to the project base directory for debugging
             try:
                 import os.path
@@ -582,6 +602,7 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
         else:
             # Use the original audio reference if it's not a numpy array
             # (though this should not happen with our current implementation)
+            self.logger.warning(f"Non-numpy audio reference received (type: {type(audio_reference)})")
             command = TranscribeAudioCommand(
                 audio_chunk=audio_reference,
                 session_id=session_id,
@@ -590,4 +611,5 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
                 timestamp_ms=time.time() * 1000
             )
         
+        self.logger.info(f"Processing speech segment (duration: {duration:.2f}s) with session: {session_id}")
         self.handle(command)

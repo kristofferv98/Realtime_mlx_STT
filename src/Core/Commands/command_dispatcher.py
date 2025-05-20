@@ -6,10 +6,12 @@ It serves as the central mediator between command senders and handlers.
 """
 
 import logging
-from typing import Any, Dict, Generic, List, Type, TypeVar
+from typing import Any, Dict, Generic, List, Type, TypeVar, ForwardRef
 
-from ..Common.Interfaces.command_handler import ICommandHandler
 from .command import Command
+
+# Use forward reference
+ICommandHandler = ForwardRef('ICommandHandler')
 
 # Configure logging
 logger = logging.getLogger("realtimestt.core.commands")
@@ -28,9 +30,9 @@ class CommandDispatcher:
     
     def __init__(self):
         """Initialize the command dispatcher with an empty handler registry."""
-        self._handlers: Dict[Type[Command], List[ICommandHandler]] = {}
+        self._handlers: Dict[Type[Command], List['ICommandHandler']] = {}
     
-    def register_handler(self, command_type: Type[Command], handler: ICommandHandler) -> None:
+    def register_handler(self, command_type: Type[Command], handler: 'ICommandHandler') -> None:
         """
         Register a handler for a specific command type.
         
@@ -44,6 +46,8 @@ class CommandDispatcher:
         if not issubclass(command_type, Command):
             raise TypeError(f"Expected Command subclass, got {command_type.__name__}")
         
+        # Import here to avoid circular import at module level
+        from ..Common.Interfaces.command_handler import ICommandHandler
         if not isinstance(handler, ICommandHandler):
             raise TypeError(f"Expected ICommandHandler, got {type(handler).__name__}")
         
@@ -152,7 +156,7 @@ class CommandDispatcher:
         
         return all_handlers
     
-    def unregister_handler(self, command_type: Type[Command], handler: ICommandHandler) -> bool:
+    def unregister_handler(self, command_type: Type[Command], handler: 'ICommandHandler') -> bool:
         """
         Unregister a handler for a specific command type.
         

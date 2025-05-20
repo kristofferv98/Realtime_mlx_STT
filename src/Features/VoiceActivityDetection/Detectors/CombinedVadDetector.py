@@ -359,8 +359,12 @@ class CombinedVadDetector(IVoiceActivityDetector):
             if webrtc_config:
                 self.webrtc_detector.configure(webrtc_config)
             
-            if silero_config and self.use_silero_confirmation:
-                self.silero_detector.configure(silero_config)
+            # Always configure Silero detector regardless of use_silero_confirmation setting
+            # This ensures that configuration changes are preserved even if Silero is only enabled later
+            if silero_config:
+                self.logger.debug(f"Configuring Silero VAD with: {silero_config}")
+                result = self.silero_detector.configure(silero_config)
+                self.logger.debug(f"Silero configuration result: {result}")
             
             return True
             

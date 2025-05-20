@@ -10,8 +10,8 @@ import threading
 from collections import defaultdict
 from typing import Callable, Dict, List, Set, Type
 
-from ..Common.Interfaces.event_bus import IEventBus
 from .event import Event
+from ..Common.Interfaces.event_bus import IEventBus
 
 # Configure logging
 logger = logging.getLogger("realtimestt.core.events")

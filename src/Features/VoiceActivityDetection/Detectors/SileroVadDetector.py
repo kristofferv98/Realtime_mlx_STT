@@ -8,6 +8,8 @@ Silero VAD model, which offers higher accuracy compared to rule-based approaches
 import logging
 import os
 import struct
+import shutil 
+import time
 from typing import Dict, Any, Optional, Tuple, List, Union
 
 import numpy as np
@@ -28,9 +30,9 @@ class SileroVadDetector(IVoiceActivityDetector):
     confidence scores for detections.
     """
     
+    # Silero VAD model information
     DEFAULT_MODEL = "silero_vad"
-    DEFAULT_MODEL_URL = "https://huggingface.co/snakers4/silero-vad/resolve/master/silero_vad.onnx"
-    FALLBACK_MODEL_URL = "https://huggingface.co/onnx-community/silero-vad/resolve/main/silero_vad.onnx"
+    TORCH_REPO = "snakers4/silero-vad"  # Official Silero VAD repository
     
     def __init__(self, 
                  threshold: float = 0.5,
@@ -90,11 +92,21 @@ class SileroVadDetector(IVoiceActivityDetector):
         self.speech_start = 0
         self.speech_end = 0
         
-        # Reset RNN states
+        # Reset RNN states for all possible model formats
         if hasattr(self, 'h_state'):
             self.h_state = np.zeros((2, 1, 128), dtype=np.float32)
         if hasattr(self, 'c_state'):
             self.c_state = np.zeros((2, 1, 128), dtype=np.float32)
+        if hasattr(self, 'state'):
+            self.state = np.zeros((4, 1, 128), dtype=np.float32)
+        
+        # Reset model format information if initialization failed
+        if not hasattr(self, 'model_format'):
+            self.model_format = 'unknown'
+            self.logger.info("Model format not detected yet, will be determined during first inference")
+            
+        # Log reset for debugging
+        self.logger.debug("Reset VAD internal state")
     
     def setup(self) -> bool:
         """
@@ -104,25 +116,70 @@ class SileroVadDetector(IVoiceActivityDetector):
             bool: True if setup was successful, False otherwise
         """
         try:
-            # Delete the downloaded ONNX model if present to force redownload
+            # Check for required directories
+            os.makedirs(self.cache_dir, exist_ok=True)
+            
+            # Model path
             model_path = os.path.join(self.cache_dir, "silero_vad.onnx")
+            
+            # Check if we should use existing model if present
+            use_existing = True
             if os.path.exists(model_path):
+                if os.path.getsize(model_path) < 10000:  # File too small, likely corrupted
+                    self.logger.warning(f"Existing model file too small ({os.path.getsize(model_path)} bytes), forcing redownload")
+                    use_existing = False
+                else:
+                    self.logger.info(f"Existing model file found: {model_path} ({os.path.getsize(model_path)} bytes)")
+            
+            # Force redownload if needed
+            if not use_existing and os.path.exists(model_path):
                 try:
+                    # Backup the model before removing it
+                    backup_name = f"silero_vad.onnx.backup.{int(time.time())}"
+                    backup_path = os.path.join(self.cache_dir, backup_name)
+                    shutil.copy2(model_path, backup_path)
+                    self.logger.info(f"Backed up existing model to {backup_path}")
+                    
+                    # Remove the existing model
                     os.remove(model_path)
                     self.logger.info(f"Removed existing model file: {model_path}")
                 except Exception as e:
-                    self.logger.warning(f"Failed to remove existing model file: {e}")
+                    self.logger.warning(f"Failed to backup/remove existing model file: {e}")
             
+            # Setup the appropriate model implementation
             if self.use_onnx:
-                self._setup_onnx_model()
+                try:
+                    import onnxruntime
+                    self.logger.info(f"Using ONNX Runtime version: {onnxruntime.__version__}")
+                    self._setup_onnx_model()
+                except ImportError as e:
+                    self.logger.warning(f"ONNX Runtime not available ({e}), falling back to PyTorch model")
+                    self.use_onnx = False
+                    self._setup_torch_model()
             else:
-                self._setup_torch_model()
+                try:
+                    self.logger.info(f"Using PyTorch version: {torch.__version__}")
+                    self._setup_torch_model()
+                except Exception as e:
+                    self.logger.error(f"Failed to setup PyTorch model: {e}")
+                    # Try ONNX as fallback if PyTorch fails
+                    try:
+                        self.logger.info("Trying ONNX model as fallback")
+                        self.use_onnx = True
+                        self._setup_onnx_model()
+                    except Exception as e2:
+                        self.logger.error(f"Failed to setup ONNX model as fallback: {e2}")
+                        return False
             
-            self.logger.info(f"Initialized Silero VAD with threshold {self.threshold}")
+            # Reset state and return success
+            self.logger.info(f"Successfully initialized Silero VAD (using {'ONNX' if self.use_onnx else 'PyTorch'}) with threshold {self.threshold}")
             self.reset_state()
             return True
+            
         except Exception as e:
             self.logger.error(f"Failed to initialize Silero VAD: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return False
     
     def _setup_torch_model(self):
@@ -130,12 +187,22 @@ class SileroVadDetector(IVoiceActivityDetector):
         # Check if we have torch
         if not torch:
             raise ImportError("PyTorch not available. Install with 'pip install torch'")
-            
-        # Load model from torch hub
-        model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad',
-                                     model='silero_vad',
-                                     force_reload=False,
-                                     onnx=False)
+        
+        # Create cache directory
+        torch_hub_dir = os.path.join(self.cache_dir, "torch_hub")
+        os.makedirs(torch_hub_dir, exist_ok=True)
+        torch.hub.set_dir(torch_hub_dir)
+        
+        self.logger.info(f"Loading Silero VAD model from PyTorch Hub...")
+        
+        # Load model from torch hub using the same approach as KoljaB/RealtimeSTT
+        model, utils = torch.hub.load(
+            repo_or_dir=self.TORCH_REPO,
+            model=self.DEFAULT_MODEL,
+            force_reload=False,
+            onnx=False,
+            trust_repo=True
+        )
         
         # Get preprocessing function
         (get_speech_timestamps, 
@@ -153,23 +220,56 @@ class SileroVadDetector(IVoiceActivityDetector):
         
         # Set model to evaluation mode
         self.model.eval()
+        
+        self.logger.info("Successfully loaded Silero VAD PyTorch model")
     
     def _setup_onnx_model(self):
         """Set up ONNX Silero VAD model for faster inference"""
         try:
             import onnxruntime as ort
             
-            model_path = os.path.join(self.cache_dir, "silero_vad.onnx")
+            # Create model directory with Parents if it doesn't exist
+            os.makedirs(self.cache_dir, exist_ok=True)
+            torch_hub_dir = os.path.join(self.cache_dir, "torch_hub")
+            os.makedirs(torch_hub_dir, exist_ok=True)
+            torch.hub.set_dir(torch_hub_dir)
             
-            # Download model if not exists
-            if not os.path.exists(model_path):
-                self.logger.info("Downloading Silero VAD ONNX model...")
-                import urllib.request
-                try:
-                    urllib.request.urlretrieve(self.DEFAULT_MODEL_URL, model_path)
-                except Exception as e:
-                    self.logger.warning(f"Failed to download from primary URL: {e}, trying fallback URL")
-                    urllib.request.urlretrieve(self.FALLBACK_MODEL_URL, model_path)
+            # Load model directly from PyTorch hub
+            self.logger.info("Loading Silero VAD model from PyTorch Hub...")
+            repo_dir = os.path.join(torch_hub_dir, "snakers4_silero-vad_master")
+            
+            # If not already downloaded, get it from hub with ONNX=True
+            if not os.path.exists(repo_dir):
+                self.logger.info("Downloading model from PyTorch Hub...")
+                model, utils = torch.hub.load(
+                    repo_or_dir=self.TORCH_REPO,
+                    model=self.DEFAULT_MODEL,
+                    verbose=True,
+                    onnx=True,
+                    trust_repo=True
+                )
+            
+            # Find ONNX model path in hub directory
+            expected_model_paths = [
+                os.path.join(repo_dir, "files", "silero_vad.onnx"),
+                os.path.join(repo_dir, "silero_vad.onnx"),
+                os.path.join(torch_hub_dir, "silero_vad.onnx")
+            ]
+            
+            model_path = None
+            for path in expected_model_paths:
+                if os.path.exists(path) and os.path.getsize(path) > 100000:
+                    model_path = path
+                    self.logger.info(f"Found ONNX model at: {model_path}")
+                    break
+            
+            # If no model found, try to download directly or export from PyTorch
+            if not model_path:
+                self.logger.warning("ONNX model not found in expected locations")
+                self.logger.warning("Falling back to PyTorch model")
+                self.use_onnx = False
+                self._setup_torch_model()
+                return
             
             # Initialize ONNX runtime session
             self.ort_session = ort.InferenceSession(model_path)
@@ -188,14 +288,18 @@ class SileroVadDetector(IVoiceActivityDetector):
                 self.model_format = 'h0_c0'
             
             self.logger.info(f"Detected model format: {self.model_format}")
-            
-            # We'll implement custom speech timestamps function when using ONNX
             self.logger.info("Successfully loaded Silero VAD ONNX model")
             
-        except ImportError:
-            self.logger.warning("ONNX Runtime not available. Falling back to PyTorch model")
+        except ImportError as e:
+            self.logger.warning(f"ONNX Runtime not available ({e}). Falling back to PyTorch model")
             self.use_onnx = False
             self._setup_torch_model()
+        except Exception as e:
+            self.logger.error(f"Failed to load ONNX model: {e}")
+            self.logger.warning("Falling back to PyTorch model")
+            self.use_onnx = False
+            self._setup_torch_model()
+    
     
     def detect(self, audio_data: bytes, sample_rate: Optional[int] = None) -> bool:
         """
@@ -263,7 +367,26 @@ class SileroVadDetector(IVoiceActivityDetector):
         # Normalize to [-1, 1]
         audio_array = audio_array / 32768.0
         
-        return audio_array
+        # Silero VAD expects audio data in chunks of specific sizes:
+        # - 256 samples for 8kHz audio
+        # - 512 samples for 16kHz audio
+        expected_samples = 512 if self.sample_rate == 16000 else 256
+        
+        # If exact size, return as is
+        if len(audio_array) == expected_samples:
+            return audio_array
+        
+        # If too large, truncate to the expected size
+        if len(audio_array) > expected_samples:
+            self.logger.debug(f"Truncating audio from {len(audio_array)} to {expected_samples} samples")
+            return audio_array[:expected_samples]
+        
+        # If too small, pad with zeros
+        if len(audio_array) < expected_samples:
+            self.logger.debug(f"Padding audio from {len(audio_array)} to {expected_samples} samples")
+            padded = np.zeros(expected_samples, dtype=np.float32)
+            padded[:len(audio_array)] = audio_array
+            return padded
     
     def _predict_torch(self, audio_array: np.ndarray) -> float:
         """Get speech probability using PyTorch model"""
@@ -286,63 +409,87 @@ class SileroVadDetector(IVoiceActivityDetector):
         tensor = audio_array.reshape(1, -1)
         
         try:
-            if hasattr(self, 'model_format'):
-                # Create inputs based on detected model format
-                if self.model_format == 'state':
-                    ort_inputs = {
-                        'input': tensor.astype(np.float32),
-                        'sr': np.array([self.sample_rate], dtype=np.int64),
-                        'state': np.zeros((4, 1, 128), dtype=np.float32)  # Initial state
-                    }
-                elif self.model_format == 'h0_c0':
-                    ort_inputs = {
-                        'input': tensor.astype(np.float32),
-                        'sr': np.array([self.sample_rate], dtype=np.int64),
-                        'h0': self.h_state,
-                        'c0': self.c_state
-                    }
-                else:  # Use basic input format as fallback
-                    ort_inputs = {
-                        'input': tensor.astype(np.float32),
-                        'sr': np.array([self.sample_rate], dtype=np.int64)
-                    }
-            else:  # Use basic input format as fallback
-                ort_inputs = {
-                    'input': tensor.astype(np.float32),
-                    'sr': np.array([self.sample_rate], dtype=np.int64)
-                }
-            
-            # Get output names
+            # Get input and output names from the model
+            input_names = [input.name for input in self.ort_session.get_inputs()]
             output_names = [output.name for output in self.ort_session.get_outputs()]
             
-            # Run ONNX inference
-            ort_outs = self.ort_session.run(output_names, ort_inputs)
+            # Create inputs dict based on the required inputs for the model
+            ort_inputs = {}
             
-            # Get speech probability from first output
-            speech_prob = ort_outs[0][0].item()
+            # Common inputs for all model formats
+            if 'input' in input_names:
+                ort_inputs['input'] = tensor.astype(np.float32)
             
-            # Update state if available
+            if 'sr' in input_names:
+                ort_inputs['sr'] = np.array([self.sample_rate], dtype=np.int64)
+            
+            # Handle different model formats
+            if hasattr(self, 'model_format'):
+                if self.model_format == 'state' and 'state' in input_names:
+                    # Some models expect a single state tensor with shape (4, 1, 128)
+                    state_shape = (4, 1, 128)  # Standard shape for Silero VAD state
+                    
+                    # Initialize state if not already done
+                    if not hasattr(self, 'state') or self.state is None:
+                        self.state = np.zeros(state_shape, dtype=np.float32)
+                    
+                    ort_inputs['state'] = self.state
+                
+                elif self.model_format == 'h0_c0':
+                    # Initialize states if not already done
+                    if not hasattr(self, 'h_state') or self.h_state is None:
+                        self.h_state = np.zeros((2, 1, 128), dtype=np.float32)
+                    
+                    if not hasattr(self, 'c_state') or self.c_state is None:
+                        self.c_state = np.zeros((2, 1, 128), dtype=np.float32)
+                    
+                    # Add states to inputs
+                    if 'h0' in input_names:
+                        ort_inputs['h0'] = self.h_state
+                    
+                    if 'c0' in input_names:
+                        ort_inputs['c0'] = self.c_state
+            
+            # Run inference with the prepared inputs
+            ort_outs = self.ort_session.run(None, ort_inputs)
+            
+            # Get speech probability from first output (probability should always be first)
+            if len(ort_outs) > 0 and ort_outs[0] is not None:
+                speech_prob = float(ort_outs[0].item() if ort_outs[0].size == 1 else ort_outs[0][0].item())
+            else:
+                self.logger.warning("No valid output from ONNX inference")
+                speech_prob = 0.0
+            
+            # Update state if available in outputs
             if hasattr(self, 'model_format') and len(ort_outs) > 1:
-                if self.model_format == 'state' and output_names[1] == 'state':
-                    state_out = ort_outs[1]
-                    if state_out.shape[0] == 4:  # Expected shape for state
-                        # Update our state with the model's output state
-                        pass  # Not updating for now to avoid further issues
-                elif self.model_format == 'h0_c0' and len(output_names) > 2:
-                    if 'hn' in output_names and 'cn' in output_names:
-                        hn_idx = output_names.index('hn')
-                        cn_idx = output_names.index('cn')
-                        # Update our state with the model's output state
-                        if hn_idx < len(ort_outs) and cn_idx < len(ort_outs):
-                            self.h_state = ort_outs[hn_idx]
-                            self.c_state = ort_outs[cn_idx]
+                output_dict = {name: ort_outs[i] for i, name in enumerate(output_names) if i < len(ort_outs)}
+                
+                if self.model_format == 'state' and 'state' in output_dict:
+                    state_out = output_dict['state']
+                    # Update state if shape matches our expected state shape
+                    if state_out.shape == self.state.shape:
+                        self.state = state_out
+                        self.logger.debug("Updated RNN state")
+                
+                elif self.model_format == 'h0_c0':
+                    if 'hn' in output_dict and 'cn' in output_dict:
+                        hn_out = output_dict['hn']
+                        cn_out = output_dict['cn']
+                        
+                        # Update states if shapes match
+                        if hn_out.shape == self.h_state.shape and cn_out.shape == self.c_state.shape:
+                            self.h_state = hn_out
+                            self.c_state = cn_out
+                            self.logger.debug("Updated RNN h and c states")
+            
+            return speech_prob
             
         except Exception as e:
             self.logger.error(f"Failed to run ONNX inference: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             # Fallback to a default value
-            speech_prob = 0.0
-        
-        return speech_prob
+            return 0.0
     
     def get_speech_timestamps(self, audio_data: bytes, 
                               return_seconds: bool = False) -> List[Dict[str, Union[int, float]]]:
@@ -401,88 +548,117 @@ class SileroVadDetector(IVoiceActivityDetector):
                                     min_speech_duration_ms: int,
                                     return_seconds: bool) -> List[Dict[str, Union[int, float]]]:
         """Custom implementation of speech timestamp detection for ONNX model"""
-        # Implementation specific to ONNX model
-        # This is a simplified version of the PyTorch implementation
+        # Save current RNN state to restore at the end
+        # This ensures that this function doesn't affect ongoing detection
+        saved_states = {}
+        if hasattr(self, 'h_state'):
+            saved_states['h_state'] = self.h_state.copy() if self.h_state is not None else None
+        if hasattr(self, 'c_state'):
+            saved_states['c_state'] = self.c_state.copy() if self.c_state is not None else None
+        if hasattr(self, 'state'):
+            saved_states['state'] = self.state.copy() if self.state is not None else None
         
-        # Process audio in chunks of window_size_samples
-        num_samples = len(audio_array)
-        timestamps = []
-        
-        min_silence_samples = int(min_silence_duration_ms * self.sample_rate / 1000)
-        min_speech_samples = int(min_speech_duration_ms * self.sample_rate / 1000)
-        
-        # Process audio in windows
-        speech_start = None
-        in_speech = False
-        silence_counter = 0
-        
-        for i in range(0, num_samples, window_size_samples):
-            chunk = audio_array[i:i + window_size_samples]
+        try:
+            # Process audio in chunks of window_size_samples
+            num_samples = len(audio_array)
+            timestamps = []
             
-            # Skip if chunk is too small
-            if len(chunk) < window_size_samples:
-                if len(chunk) < window_size_samples // 2:
-                    break
-                # Pad with zeros if needed
-                pad_size = window_size_samples - len(chunk)
-                chunk = np.pad(chunk, (0, pad_size), 'constant')
+            min_silence_samples = int(min_silence_duration_ms * self.sample_rate / 1000)
+            min_speech_samples = int(min_speech_duration_ms * self.sample_rate / 1000)
             
-            # Get speech probability for this chunk
-            ort_inputs = {
-                'input': chunk.reshape(1, -1).astype(np.float32),
-                'sr': np.array([self.sample_rate], dtype=np.int64)
-            }
+            # Reset RNN states for clean processing
+            self.reset_state()
             
-            ort_outs = self.ort_session.run(None, ort_inputs)
-            speech_prob = ort_outs[0][0].item()
+            # Process audio in windows
+            speech_start = None
+            in_speech = False
+            silence_counter = 0
+            speech_probs = []  # Keep track of speech probabilities for debugging
             
-            # Apply threshold logic
-            if not in_speech and speech_prob >= threshold:
-                in_speech = True
-                speech_start = i
-                silence_counter = 0
-            elif in_speech:
-                if speech_prob >= threshold:
+            for i in range(0, num_samples, window_size_samples):
+                chunk = audio_array[i:i + window_size_samples]
+                
+                # Skip if chunk is too small
+                if len(chunk) < window_size_samples:
+                    if len(chunk) < window_size_samples // 2:
+                        break
+                    # Pad with zeros if needed
+                    pad_size = window_size_samples - len(chunk)
+                    chunk = np.pad(chunk, (0, pad_size), 'constant')
+                
+                # Get speech probability for this chunk using our existing method
+                speech_prob = self._predict_onnx(chunk)
+                speech_probs.append(speech_prob)
+                
+                # Apply threshold logic
+                if not in_speech and speech_prob >= threshold:
+                    in_speech = True
+                    speech_start = i
                     silence_counter = 0
-                else:
-                    silence_counter += window_size_samples
-                    
-                    if silence_counter >= min_silence_samples:
-                        # End of speech detected
-                        in_speech = False
+                    self.logger.debug(f"Speech start detected at {i} samples with prob {speech_prob:.4f}")
+                elif in_speech:
+                    if speech_prob >= threshold:
+                        silence_counter = 0
+                    else:
+                        silence_counter += window_size_samples
                         
-                        # Only add if speech segment is long enough
-                        speech_end = i
-                        if speech_end - speech_start >= min_speech_samples:
-                            if return_seconds:
-                                timestamps.append({
-                                    'start': speech_start / self.sample_rate,
-                                    'end': speech_end / self.sample_rate
-                                })
+                        if silence_counter >= min_silence_samples:
+                            # End of speech detected
+                            in_speech = False
+                            speech_end = i
+                            
+                            self.logger.debug(f"Speech end detected at {speech_end} samples")
+                            
+                            # Only add if speech segment is long enough
+                            if speech_end - speech_start >= min_speech_samples:
+                                if return_seconds:
+                                    timestamps.append({
+                                        'start': speech_start / self.sample_rate,
+                                        'end': speech_end / self.sample_rate
+                                    })
+                                else:
+                                    timestamps.append({
+                                        'start': speech_start,
+                                        'end': speech_end
+                                    })
+                                self.logger.debug(f"Added valid speech segment: {speech_start}-{speech_end} samples")
                             else:
-                                timestamps.append({
-                                    'start': speech_start,
-                                    'end': speech_end
-                                })
-                        
-                        speech_start = None
-        
-        # Handle case where speech continues until the end
-        if in_speech and speech_start is not None:
-            speech_end = num_samples
-            if speech_end - speech_start >= min_speech_samples:
-                if return_seconds:
-                    timestamps.append({
-                        'start': speech_start / self.sample_rate,
-                        'end': speech_end / self.sample_rate
-                    })
-                else:
-                    timestamps.append({
-                        'start': speech_start,
-                        'end': speech_end
-                    })
-        
-        return timestamps
+                                self.logger.debug(f"Discarded short speech segment: {speech_end - speech_start} samples")
+                            
+                            speech_start = None
+            
+            # Handle case where speech continues until the end
+            if in_speech and speech_start is not None:
+                speech_end = num_samples
+                if speech_end - speech_start >= min_speech_samples:
+                    if return_seconds:
+                        timestamps.append({
+                            'start': speech_start / self.sample_rate,
+                            'end': speech_end / self.sample_rate
+                        })
+                    else:
+                        timestamps.append({
+                            'start': speech_start,
+                            'end': speech_end
+                        })
+                    self.logger.debug(f"Added speech segment continuing to end: {speech_start}-{speech_end} samples")
+            
+            # Log summary for debugging
+            avg_prob = sum(speech_probs) / len(speech_probs) if speech_probs else 0
+            self.logger.debug(f"Speech timestamps: {len(timestamps)} segments found, avg prob: {avg_prob:.4f}")
+            
+            return timestamps
+            
+        except Exception as e:
+            self.logger.error(f"Error getting speech timestamps: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return []
+        finally:
+            # Restore saved states
+            for key, value in saved_states.items():
+                if value is not None:
+                    setattr(self, key, value)
     
     def configure(self, config: Dict[str, Any]) -> bool:
         """

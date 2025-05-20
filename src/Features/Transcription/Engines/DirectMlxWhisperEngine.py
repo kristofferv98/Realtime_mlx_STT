@@ -435,11 +435,22 @@ def log_mel_spectrogram(audio, n_mels=128, padding=0):
     else:
         logger.info(f"log_mel_spectrogram input type: {type(audio)}")
     
-    # Handle empty inputs - return minimal valid spectrogram
-    if isinstance(audio, np.ndarray) and (audio.size == 0 or np.all(audio == 0)):
-        # Return minimal spectrogram with correct dimensions
-        logger.warning("Empty audio data provided to log_mel_spectrogram")
-        return mx.zeros((1, n_mels))
+    # Handle empty or silent inputs with more detailed logging
+    if isinstance(audio, np.ndarray):
+        if audio.size == 0:
+            logger.warning("Empty audio array provided to log_mel_spectrogram")
+            return mx.zeros((1, n_mels))
+        
+        # Log RMS for completely silent audio (but process it anyway)
+        rms = np.sqrt(np.mean(np.square(audio)))
+        if np.all(audio == 0.0):  # Only skip if exactly all zeros
+            logger.warning(f"Completely silent audio (all zeros) provided to log_mel_spectrogram")
+            # Return minimal spectrogram with correct dimensions with a tiny bit of noise
+            # A small amount of noise helps prevent the model from outputting repetitive text
+            random_spec = mx.array(np.random.uniform(0.1, 0.2, (1, n_mels)).astype(np.float32))
+            return random_spec
+        elif rms < 0.001:
+            logger.info(f"Very quiet audio provided to log_mel_spectrogram (RMS: {rms:.5f})")
     
     if isinstance(audio, str):
         # Load audio from file path
@@ -459,7 +470,7 @@ def log_mel_spectrogram(audio, n_mels=128, padding=0):
     
     # Handle empty mx arrays
     if hasattr(audio, 'size') and audio.size == 0:
-        logging.getLogger(__name__).warning("Empty mx.array provided to log_mel_spectrogram")
+        logger.warning("Empty mx.array provided to log_mel_spectrogram")
         return mx.zeros((1, n_mels))
         
     if padding > 0:
@@ -474,6 +485,14 @@ def log_mel_spectrogram(audio, n_mels=128, padding=0):
     log_spec = mx.maximum(log_spec, log_spec.max() - 8.0)
     log_spec = (log_spec + 4.0) / 4.0
     
+    # Check if the generated spectrogram has very low energy
+    # This can happen with extremely quiet audio or filtered noise
+    mean_energy = mx.mean(log_spec).item()
+    if mean_energy < 0.2:  # This threshold can be adjusted
+        logger.warning(f"Generated spectrogram has very low energy: {mean_energy:.5f}")
+        # We'll continue with the low-energy spectrogram, but log a warning
+    
+    logger.info(f"Generated mel spectrogram with shape {log_spec.shape}, energy: {mean_energy:.5f}")
     return log_spec
 
 
@@ -505,11 +524,13 @@ class Transcriber(nn.Module):
         
         # For short audio segments (common in VAD-triggered events), always use recurrent mode
         # This provides better results for short utterances
-        if raw.shape[0] < 3000:
-            logger.info(f"Short audio segment detected ({raw.shape[0]} frames) - forcing recurrent mode")
+        # Adjusted threshold - 500 frames is about 5 seconds of audio
+        if raw.shape[0] < 500:
+            logger.info(f"Short audio segment detected ({raw.shape[0]} frames < 500) - forcing recurrent mode")
             txt = self.recurrent(raw, sot)
         else:
             # For longer segments, use the specified mode
+            logger.info(f"Using normal processing mode for segment with {raw.shape[0]} frames")
             txt = self.parallel(raw, sot) if quick else self.recurrent(raw, sot)
             
         return txt
@@ -519,16 +540,36 @@ class Transcriber(nn.Module):
         logger = logging.getLogger(__name__)
         logger.info(f"recurrent: Input spectrogram shape={raw.shape}, length={len(raw)}")
         
-        # Handle very short audio (less than 3000 frames)
-        if len(raw) < 3000:
-            logger.info(f"Short audio segment detected ({len(raw)} < 3000 samples), padding for processing")
+        # Handle different audio segment lengths
+        if len(raw) < 500:  # Very short segments (under 5 seconds)
+            logger.info(f"Very short audio segment detected ({len(raw)} < 500 frames), using special handling")
             
-            # Create padded version
+            # Skip extremely short segments (likely noise or silence)
+            if len(raw) < 10:  # This threshold can be adjusted
+                logger.warning(f"Extremely short segment detected ({len(raw)} frames), skipping")
+                return ""
+                
+            # Create padded version - use reflection padding instead of zeros
+            # This creates more natural context for the model
             padded_raw = mx.zeros((3000, raw.shape[1]))
+            
+            # Copy the actual audio data
             padded_raw[:len(raw)] = raw
             
-            # Process the single chunk
-            logger.info("Processing padded segment as a single chunk")
+            # Reflection padding:
+            # If we have enough frames, reflect the last N frames to create natural transition
+            if len(raw) > 50:
+                # Reflect the end portion to fill padding (more natural than zeros)
+                reflect_size = min(len(raw), 3000 - len(raw))
+                for i in range(min(reflect_size, 500)):  # Limit to 500 frames of reflection
+                    if len(raw) + i < 3000:
+                        # Use reflection of audio with slight decay
+                        reflection_idx = max(0, len(raw) - 1 - i)
+                        decay_factor = 0.95 ** (i+1)  # Gradual decay
+                        padded_raw[len(raw) + i] = raw[reflection_idx] * decay_factor
+            
+            # Process the single chunk with attenuated padding
+            logger.info("Processing very short segment as a single padded chunk")
             piece = self.step(padded_raw[None], sot)
             
             # Extract tokens
@@ -542,6 +583,13 @@ class Transcriber(nn.Module):
             result = self.tokenizer.decode(new_tok)[0]
             logger.info(f"Short audio transcription result: {len(result)} characters")
             return result
+            
+        elif len(raw) < 3000:  # Medium-length segments (5-30 seconds)
+            logger.info(f"Medium-length audio segment detected ({len(raw)} frames), using standard processing")
+            # Process normally using the recurrent approach without padding
+            # This preserves the original audio characteristics without unnecessary padding
+            # Fall through to the normal processing code below
+            pass
         
         # Normal processing for longer audio
         new_tok, i = mx.zeros((1,0), dtype=mx.int32), 0
@@ -602,36 +650,66 @@ class Transcriber(nn.Module):
         # Log the raw audio spectrogram shape
         logger.info(f"parallel: Input spectrogram shape={raw.shape}")
         
-        # Special handling for short audio segments
-        if raw.shape[0] < 3000:
-            logger.info(f"Short audio segment detected ({raw.shape[0]} < 3000 samples), applying special handling")
+        # Different handling based on audio segment length
+        if raw.shape[0] < 10:  # Extremely short segments (likely noise)
+            logger.warning(f"Extremely short segment detected ({raw.shape[0]} frames), skipping")
+            return ""
+            
+        elif raw.shape[0] < 500:  # Very short segments (under 5 seconds)
+            logger.info(f"Very short audio segment detected ({raw.shape[0]} < 500 frames), applying special handling")
             
             # For very short segments, we pad them to 3000 to ensure the model has enough context
-            # This helps the model handle short speech segments better
-            if raw.shape[0] > 0:
-                padding_needed = 3000 - raw.shape[0]
-                logger.info(f"Padding spectrogram with {padding_needed} frames")
+            padding_needed = 3000 - raw.shape[0]
+            logger.info(f"Padding spectrogram with {padding_needed} frames")
+            
+            # Create padding with improved method
+            if raw.shape[0] > 50:  # If we have enough data for reflection padding
+                # Create a gradual fade-out using reflection with decay
+                padding = mx.zeros((padding_needed, raw.shape[1]))
                 
-                # Create padding (repeating the last frame or using zeros)
-                if raw.shape[0] > 10:  # If we have at least some real data, repeat the last few frames
-                    # Use the last 10 frames (or fewer if audio is shorter) and repeat them
-                    last_frames = raw[-min(10, raw.shape[0]):]
-                    padding = mx.concatenate([last_frames] * (padding_needed // last_frames.shape[0] + 1), axis=0)
-                    padding = padding[:padding_needed]
-                else:
-                    # Create zero padding if we have very little data
-                    padding = mx.zeros((padding_needed, raw.shape[1]))
+                # Reflect frames with gradual decay
+                for i in range(min(padding_needed, 500)):  # Limit to 500 frames
+                    reflection_idx = max(0, raw.shape[0] - 1 - (i % raw.shape[0]))
+                    decay_factor = 0.95 ** (i+1)  # Gradual decay
+                    padding[i] = raw[reflection_idx] * decay_factor
+                    
+                # Pad the original data
+                raw = mx.concatenate([raw, padding], axis=0)
+                logger.info(f"Padded with reflection fade-out, shape={raw.shape}")
+            else:
+                # For very short segments, use repeat padding with decay
+                last_frames = raw[-min(10, raw.shape[0]):]
+                padding = mx.concatenate([last_frames] * (padding_needed // last_frames.shape[0] + 1), axis=0)
+                padding = padding[:padding_needed]
+                
+                # Apply decay to padding
+                for i in range(padding_needed):
+                    decay_factor = 0.95 ** (i+1)
+                    padding[i] = padding[i] * decay_factor
                 
                 # Pad the original data
                 raw = mx.concatenate([raw, padding], axis=0)
-                logger.info(f"Padded spectrogram shape={raw.shape}")
-            else:
-                # If we have no data at all, create a minimal valid input
-                raw = mx.zeros((3000, 128))
-                logger.info("Created minimal valid input spectrogram")
+                logger.info(f"Padded with repeated frames and decay, shape={raw.shape}")
             
             # Reshape to the expected 3D format with batch dimension
             raw = raw.reshape(-1, 3000, 128)
+            
+        elif raw.shape[0] < 3000:  # Medium-length segments (5-30 seconds)
+            logger.info(f"Medium-length audio segment ({raw.shape[0]} frames), processing directly")
+            
+            # For medium segments, don't pad to 3000, just ensure it's a multiple of 1000
+            # This is a compromise to respect the original audio while still using parallel processing
+            raw_length = raw.shape[0]
+            remainder = raw_length % 1000
+            
+            if remainder > 0:
+                padding_needed = 1000 - remainder
+                padding = mx.zeros((padding_needed, raw.shape[1]))
+                raw = mx.concatenate([raw, padding], axis=0)
+                logger.info(f"Added minimal padding ({padding_needed} frames) to make length multiple of 1000")
+            
+            # Reshape for parallel processing with 1000-frame chunks (smaller than default 3000)
+            raw = raw.reshape(-1, 1000, 128)
         else:
             # Normal processing for longer audio
             # Ensure input is multiple of 3000 and reshape
@@ -671,12 +749,26 @@ class Transcriber(nn.Module):
     
     def step(self, mel, txt):
         """Process a single step of transcription."""
+        # Log the mel shape for debugging
+        logger = logging.getLogger(__name__)
+        chunk_size = mel.shape[1]  # Get the chunk size (could be 1000 or 3000 or other)
+        logger.info(f"Processing step with mel shape: {mel.shape} (chunk size: {chunk_size})")
+        
+        # Encode the mel spectrogram
         mel = self.model.encode(mel)
         kv_cache = None
         B = mel.shape[0]
         new_tok = mx.zeros((B,0), dtype=mx.int32)
         goon = mx.ones((B,1), dtype=mx.bool_)
-        for i in range(449-self.len_sot):
+        
+        # Calculate maximum tokens based on input length
+        # Smaller chunks should generate fewer tokens to avoid "hallucinating" content
+        # The original 449 is based on 3000-frame chunks
+        max_new_tokens = min(449, max(100, (chunk_size * 449) // 3000)) - self.len_sot
+        
+        logger.info(f"Using max_new_tokens={max_new_tokens} for chunk_size={chunk_size}")
+        
+        for i in range(max_new_tokens):
             logits, kv_cache, _ = self.model.decode(
                 txt=txt if i == 0 else mx.argmax(logits[:,-1:,:], axis=-1), 
                 mel=mel, 
@@ -688,6 +780,8 @@ class Transcriber(nn.Module):
             new_tok = mx.concatenate([new_tok, txt], axis=-1)
             if goon.sum() <= 0:
                 break
+                
+        logger.info(f"Generated {new_tok.shape[1]} tokens")
         return new_tok
 
 

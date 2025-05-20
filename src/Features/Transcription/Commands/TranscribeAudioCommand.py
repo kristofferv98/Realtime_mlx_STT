@@ -34,7 +34,7 @@ class TranscribeAudioCommand(Command):
     """
     
     def __init__(self, 
-                audio_chunk: np.ndarray,
+                audio_chunk: Any,
                 session_id: str,
                 is_first_chunk: bool = False,
                 is_last_chunk: bool = False,
@@ -48,7 +48,7 @@ class TranscribeAudioCommand(Command):
         Initialize the command.
         
         Args:
-            audio_chunk: Audio data as numpy array
+            audio_chunk: Audio data as either numpy array or file path (str)
             session_id: Session identifier
             is_first_chunk: Whether this is the first chunk
             is_last_chunk: Whether this is the last chunk
@@ -71,15 +71,19 @@ class TranscribeAudioCommand(Command):
         self.language = language
         self.options = options or {}
         
-        # Validate audio data
-        if not isinstance(self.audio_chunk, np.ndarray):
-            raise TypeError("audio_chunk must be a numpy ndarray")
+        # Flag to indicate if audio_chunk is a file path
+        self.is_file_path = isinstance(self.audio_chunk, str)
         
-        # Ensure audio is float32 in [-1.0, 1.0] range
-        if self.audio_chunk.dtype != np.float32:
+        # Validate audio data if it's a numpy array
+        if not self.is_file_path and not isinstance(self.audio_chunk, np.ndarray):
+            raise TypeError("audio_chunk must be a numpy ndarray or a file path (str)")
+        
+        # Ensure audio is float32 in [-1.0, 1.0] range if it's a numpy array
+        if not self.is_file_path and hasattr(self.audio_chunk, 'dtype') and self.audio_chunk.dtype != np.float32:
             self.audio_chunk = self.audio_chunk.astype(np.float32)
         
-        # Normalize if not already in [-1, 1] range
-        max_val = np.max(np.abs(self.audio_chunk))
-        if max_val > 0 and max_val > 1.0:
-            self.audio_chunk = self.audio_chunk / max_val
+        # Normalize if not already in [-1, 1] range and it's a numpy array
+        if not self.is_file_path and isinstance(self.audio_chunk, np.ndarray):
+            max_val = np.max(np.abs(self.audio_chunk))
+            if max_val > 0 and max_val > 1.0:
+                self.audio_chunk = self.audio_chunk / max_val

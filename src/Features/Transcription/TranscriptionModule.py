@@ -443,7 +443,14 @@ class TranscriptionModule:
         
         # Handle silence detected events
         def on_silence_detected(event):
-            if not event.audio_reference or len(event.audio_reference) == 0:
+            # Check if audio_reference exists and has content
+            if event.audio_reference is None:
+                logger.warning("Received SilenceDetectedEvent with no audio_reference")
+                return
+                
+            # Check if it's a numpy array with content
+            if isinstance(event.audio_reference, np.ndarray) and event.audio_reference.size == 0:
+                logger.warning("Received SilenceDetectedEvent with empty numpy array")
                 return
                 
             speech_id = event.speech_id
