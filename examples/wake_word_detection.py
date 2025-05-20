@@ -89,12 +89,24 @@ def main():
         if is_wake_word_active and hasattr(event, 'audio_reference') and event.audio_reference is not None:
             # Process the complete speech segment with transcription
             try:
-                # We have the complete audio segment, now transcribe it
-                transcription_module.on_silence_detected(
-                    session_id=f"wake-{event.speech_id}",
-                    audio_reference=event.audio_reference,
-                    duration=event.speech_duration
+                # We have the complete audio segment, now transcribe it using TranscriptionModule's static methods
+                # Create a unique session ID for this transcription
+                session_id = f"wake-{event.speech_id}"
+                
+                # Use transcribe_audio with the audio reference
+                audio_data = event.audio_reference
+                
+                result = TranscriptionModule.transcribe_audio(
+                    command_dispatcher,
+                    audio_data=audio_data,
+                    session_id=session_id,
+                    is_first_chunk=True,
+                    is_last_chunk=True
                 )
+                
+                # Print the result directly
+                if result and "text" in result:
+                    print(f"\n🎤 Final transcription: {result['text']} (confidence: {result.get('confidence', 0.0):.2f})")
             except Exception as e:
                 print(f"Error transcribing speech: {e}")
     
