@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Continuous Transcription Example with Clipboard Integration
+Continuous Transcription Example with Auto-Typing
 
 This example demonstrates continuous audio capture with Voice Activity Detection (VAD),
-real-time transcription, and automatic clipboard copying. It:
+real-time transcription, and automatic text insertion (as if typing). It:
 
 1. Captures audio from the default microphone
 2. Performs VAD to detect speech segments
 3. Transcribes complete speech segments when silence is detected
 4. Prints the transcribed text to the terminal
-5. Automatically copies transcriptions to the system clipboard
+5. Automatically types the transcribed text into the active application
 
 Press Ctrl+C to stop recording and exit.
 """
@@ -56,6 +56,16 @@ import signal
 import subprocess
 from typing import Dict, Any, List, Optional
 
+# Try to import pyautogui - we'll need this for typing
+try:
+    import pyautogui
+    pyautogui.FAILSAFE = False  # Disable fail-safe feature
+    PYAUTOGUI_AVAILABLE = True
+except ImportError:
+    PYAUTOGUI_AVAILABLE = False
+    print("Warning: pyautogui is not installed. Auto-typing will not work.")
+    print("To enable auto-typing, install pyautogui: pip install pyautogui")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -75,24 +85,33 @@ from src.Features.VoiceActivityDetection.VadModule import VadModule
 from src.Features.Transcription.TranscriptionModule import TranscriptionModule
 
 
-def copy_to_clipboard(text):
+def auto_type_text(text):
     """
-    Copy text to system clipboard using pbcopy (macOS specific)
+    Automatically type text into the active window (simulating keyboard input)
     
     Args:
-        text: The text to copy to the clipboard
+        text: The text to type
     """
+    if not PYAUTOGUI_AVAILABLE:
+        logger.error("pyautogui is not available. Cannot auto-type text.")
+        return False
+    
     try:
-        process = subprocess.Popen('pbcopy', env={'LANG': 'en_US.UTF-8'}, stdin=subprocess.PIPE)
-        process.communicate(text.encode('utf-8'))
-        logger.info("Text copied to clipboard.")
+        # Give the user a moment to switch to their target application
+        time.sleep(0.5)
+        
+        # Type the text
+        pyautogui.write(text)
+        logger.info("Text has been auto-typed.")
+        return True
     except Exception as e:
-        logger.error(f"Failed to copy to clipboard: {e}")
+        logger.error(f"Failed to auto-type text: {e}")
+        return False
 
 
 class ContinuousTranscriptionApp:
     """
-    Main application for continuous transcription with VAD and clipboard integration.
+    Main application for continuous transcription with VAD and auto-typing.
     
     Important note about chunk sizes:
     Silero VAD models were trained using specific chunk sizes:
@@ -109,7 +128,7 @@ class ContinuousTranscriptionApp:
                 quick_mode: bool = True,
                 keep_history: bool = True,
                 history_length: int = 10,
-                copy_mode: str = "latest"):
+                paste_mode: str = "latest"):
         """
         Initialize the application.
         
@@ -121,7 +140,7 @@ class ContinuousTranscriptionApp:
             quick_mode: Whether to use quick/parallel mode for faster transcription
             keep_history: Whether to maintain transcription history
             history_length: Number of recent transcriptions to keep in history
-            copy_mode: How to copy to clipboard ('latest' or 'full')
+            paste_mode: How to auto-type text ('latest' or 'full')
         """
         self.device_index = device_index
         self.vad_aggressiveness = vad_aggressiveness
@@ -134,8 +153,8 @@ class ContinuousTranscriptionApp:
         self.history_length = history_length
         self.transcription_history = []  # List of past transcribed segments
         
-        # Clipboard settings
-        self.copy_mode = copy_mode
+        # Auto-typing settings
+        self.paste_mode = paste_mode
         
         # Stats
         self.speech_count = 0
@@ -181,16 +200,17 @@ class ContinuousTranscriptionApp:
                     if len(self.transcription_history) > self.history_length:
                         self.transcription_history = self.transcription_history[-self.history_length:]
                 
-                # Get text to copy to clipboard
-                clipboard_text = ""
-                if self.copy_mode == "full" and self.keep_history and self.transcription_history:
-                    clipboard_text = " ".join(self.transcription_history)
+                # Get text to auto-type
+                paste_text = ""
+                if self.paste_mode == "full" and self.keep_history and self.transcription_history:
+                    paste_text = " ".join(self.transcription_history)
                 else:  # Default to latest mode
-                    clipboard_text = text.strip()
+                    paste_text = text.strip()
                 
-                # Copy to clipboard if there's text to copy
-                if clipboard_text:
-                    copy_to_clipboard(clipboard_text)
+                # Auto-type the text
+                success = False
+                if paste_text:
+                    success = auto_type_text(paste_text)
                 
                 # Get combined history text for display
                 history_text = ""
@@ -208,7 +228,10 @@ class ContinuousTranscriptionApp:
                     print(f"{history_text}")
                     
                 print("-" * 80)
-                print(f"✓ Copied to clipboard: {'Full history' if self.copy_mode == 'full' else 'Latest text'}")
+                if success:
+                    print(f"✓ Auto-typed: {'Full history' if self.paste_mode == 'full' else 'Latest text'}")
+                else:
+                    print("⚠ Failed to auto-type text")
         
         # Track speech stats
         def on_speech_detected(confidence, timestamp, speech_id):
@@ -312,8 +335,12 @@ class ContinuousTranscriptionApp:
         
         # Start running
         self.is_running = True
-        logger.info("Starting continuous transcription with clipboard integration...")
-        logger.info(f"Clipboard mode: {self.copy_mode.upper()} - will copy {'full history' if self.copy_mode == 'full' else 'latest text'}")
+        logger.info("Starting continuous transcription with auto-typing...")
+        logger.info(f"Auto-typing mode: {self.paste_mode.upper()} - will type {'full history' if self.paste_mode == 'full' else 'latest text'}")
+        
+        if not PYAUTOGUI_AVAILABLE:
+            logger.warning("pyautogui is not installed! Auto-typing feature will not work.")
+            logger.warning("Install with: pip install pyautogui")
         
         # If no device specified, list available devices
         devices_list = AudioCaptureModule.list_devices(self.command_dispatcher)
@@ -392,7 +419,16 @@ class ContinuousTranscriptionApp:
             self.is_running = False
             return False
         
-        logger.info(f"Continuous transcription started. Press Ctrl+C to stop.")
+        print("\n" + "=" * 80)
+        print("CONTINUOUS TRANSCRIPTION WITH AUTO-TYPING")
+        print("=" * 80)
+        print(f"✓ Recording started on device [{self.device_index}]")
+        print(f"✓ Auto-typing mode: {self.paste_mode.upper()}")
+        print(f"✓ After each transcription, text will be typed automatically")
+        print(f"✓ Focus your cursor where you want text to appear")
+        print("=" * 80)
+        print("Press Ctrl+C to stop.")
+        
         return True
     
     def stop(self):
@@ -428,18 +464,18 @@ class ContinuousTranscriptionApp:
             print(full_history)
             print("=" * 80)
             
-            # Copy final full history to clipboard when stopping
-            if self.copy_mode == "full":
-                copy_to_clipboard(full_history)
-                print("✓ Final full history copied to clipboard")
+            # Auto-type the final full history when stopping, if in full mode
+            if self.paste_mode == "full" and PYAUTOGUI_AVAILABLE:
+                if auto_type_text(full_history):
+                    print("✓ Final full history has been auto-typed")
         
         self.is_running = False
 
 
 def main():
-    """Parse arguments and run the continuous transcription example with clipboard integration."""
+    """Parse arguments and run the continuous transcription example with auto-typing."""
     parser = argparse.ArgumentParser(
-        description="Continuous transcription with VAD and clipboard integration example"
+        description="Continuous transcription with VAD and auto-typing example"
     )
     parser.add_argument("--device", "-d", type=int, default=None,
                       help="Audio device index (default: system default)")
@@ -455,8 +491,8 @@ def main():
                       help="Disable transcription history accumulation")
     parser.add_argument("--history-length", type=int, default=10,
                       help="Number of recent transcriptions to maintain in history (default: 10)")
-    parser.add_argument("--copy-mode", type=str, default="latest", choices=["latest", "full"],
-                      help="What to copy to clipboard: 'latest' (only the most recent transcription) or 'full' (entire history)")
+    parser.add_argument("--paste-mode", type=str, default="latest", choices=["latest", "full"],
+                      help="What to auto-type: 'latest' (only the most recent transcription) or 'full' (entire history)")
     
     args = parser.parse_args()
     
@@ -469,7 +505,7 @@ def main():
         quick_mode=not args.no_quick_mode,
         keep_history=not args.no_history,
         history_length=args.history_length,
-        copy_mode=args.copy_mode
+        paste_mode=args.paste_mode
     )
     
     app.initialize()
