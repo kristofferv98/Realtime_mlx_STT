@@ -48,6 +48,9 @@ transcribed_audio.wav
 !mel_filters.npz
 !**/warmup_audio.wav
 
+# Debug directory
+debug/
+
 # ONNX models
 *.onnx
 

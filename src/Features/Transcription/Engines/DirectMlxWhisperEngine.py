@@ -962,7 +962,9 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                     import shutil
                     import os.path
                     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
-                    debug_path = os.path.join(base_dir, "transcribed_audio.wav")
+                    debug_dir = os.path.join(base_dir, "debug")
+                    os.makedirs(debug_dir, exist_ok=True)
+                    debug_path = os.path.join(debug_dir, "transcribed_audio.wav")
                     shutil.copy2(audio, debug_path)
                     self.logger.info(f"DEBUGGING: Copied audio file to: {debug_path}")
                 except Exception as e:
@@ -985,7 +987,9 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                     import soundfile as sf
                     import os.path
                     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
-                    debug_path = os.path.join(base_dir, "latest_speech.wav")
+                    debug_dir = os.path.join(base_dir, "debug")
+                    os.makedirs(debug_dir, exist_ok=True)
+                    debug_path = os.path.join(debug_dir, "latest_speech.wav")
                     sf.write(debug_path, audio, self.sample_rate)
                     self.logger.info(f"DEBUGGING: Saved audio chunk to: {debug_path}")
                 except Exception as e:
