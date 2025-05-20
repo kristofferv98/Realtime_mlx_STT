@@ -118,41 +118,56 @@ def main():
     # Variables to track state
     is_wake_word_active = False
     active_session_id = None
+    speech_audio = None
+    last_speech_id = None
     
     # Subscribe to VAD events directly to handle transcription only after wake word
     def on_speech_detected(confidence, timestamp, speech_id):
         """Handle speech detected events, but only process after wake word."""
-        nonlocal is_wake_word_active, active_session_id
+        nonlocal is_wake_word_active, active_session_id, last_speech_id
         
         if is_wake_word_active:
             print(f"Speech detected after wake word!")
             
             # Create a session ID for this speech segment
             active_session_id = f"wake-{speech_id}"
+            last_speech_id = speech_id
             
-            # Start a new transcription session
-            TranscriptionModule.start_session(
-                command_dispatcher, 
-                session_id=active_session_id
-            )
+            # We don't start transcription here - we'll wait for the 
+            # complete audio chunk when silence is detected
     
     def on_silence_detected(speech_duration, start_time, end_time, speech_id):
         """Handle silence detected events, but only process after wake word."""
-        nonlocal is_wake_word_active, active_session_id
+        nonlocal is_wake_word_active, active_session_id, last_speech_id
         
-        if is_wake_word_active and active_session_id:
+        if is_wake_word_active and speech_id == last_speech_id:
             print(f"Processing speech after wake word (duration: {speech_duration:.2f}s)")
             
-            # Stop the current transcription session
-            TranscriptionModule.stop_session(
-                command_dispatcher,
-                session_id=active_session_id,
-                flush_remaining_audio=True
-            )
+            # We're receiving the audio data directly as a parameter in the event
+            # silenceEvent.audio_reference typically contains the audio data we need
+            audio_data = event.audio_reference
+            
+            if audio_data is not None:
+                # Transcribe the complete audio segment
+                session_id = active_session_id
+                result = TranscriptionModule.transcribe_audio(
+                    command_dispatcher,
+                    audio_data=audio_data,
+                    session_id=session_id,
+                    is_first_chunk=True,
+                    is_last_chunk=True
+                )
+                
+                # Display the transcription text directly since the event might not reach our handler
+                if result and "text" in result:
+                    print(f"\n🎤 Final transcription: {result['text']} (confidence: {result.get('confidence', 0.0):.2f})")
+            else:
+                print("Warning: No audio data available for transcription")
             
             # Reset state
             is_wake_word_active = False
             active_session_id = None
+            last_speech_id = None
             
             print(f"Listening for wake word '{args.wake_words}'...")
     
