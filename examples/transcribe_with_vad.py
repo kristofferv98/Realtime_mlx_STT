@@ -100,7 +100,8 @@ def main():
         command_dispatcher=command_dispatcher,
         event_bus=event_bus,
         detector_type=args.vad_type,
-        threshold=args.vad_threshold
+        threshold=args.vad_threshold,
+        processing_enabled=True  # Enable processing immediately since we don't use wake word
     )
     
     # Register AudioCapture last, as it will start capturing audio

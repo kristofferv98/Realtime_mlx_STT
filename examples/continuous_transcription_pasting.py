@@ -310,7 +310,8 @@ class ContinuousTranscriptionApp:
         self.vad_handler = VadModule.register(
             command_dispatcher=self.command_dispatcher,
             event_bus=self.event_bus,
-            default_detector="combined"
+            default_detector="combined",
+            processing_enabled=True  # Enable processing immediately since we don't use wake word
         )
         
         # Configure VAD with the desired aggressiveness

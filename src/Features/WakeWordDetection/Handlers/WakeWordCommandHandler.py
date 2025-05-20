@@ -24,6 +24,8 @@ from src.Features.AudioCapture.Models.AudioChunk import AudioChunk
 from src.Features.VoiceActivityDetection.Events.SpeechDetectedEvent import SpeechDetectedEvent
 from src.Features.VoiceActivityDetection.Events.SilenceDetectedEvent import SilenceDetectedEvent
 from src.Features.VoiceActivityDetection.Commands.ConfigureVadCommand import ConfigureVadCommand
+from src.Features.VoiceActivityDetection.Commands.EnableVadProcessingCommand import EnableVadProcessingCommand
+from src.Features.VoiceActivityDetection.Commands.DisableVadProcessingCommand import DisableVadProcessingCommand
 
 # Feature-specific imports
 from src.Features.WakeWordDetection.Commands.ConfigureWakeWordCommand import ConfigureWakeWordCommand
@@ -227,8 +229,11 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
         self.wake_word_name = ""
         self.listening_for_speech = False
         
-        # Ensure VAD subscription is disabled at start
+        # Ensure VAD subscription and processing are disabled at start
         self._disable_vad_processing()
+        
+        # Disable VAD processing to save resources until wake word is detected
+        self.command_dispatcher.dispatch(DisableVadProcessingCommand())
         
         # Get detector
         detector = self._get_detector(self.active_detector_name)
@@ -275,6 +280,9 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
         
         # Explicitly disable VAD processing
         self._disable_vad_processing()
+        
+        # Also disable actual VAD audio processing
+        self.command_dispatcher.dispatch(DisableVadProcessingCommand())
         
         # Publish event
         self.event_bus.publish(WakeWordDetectionStoppedEvent(
@@ -402,6 +410,7 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
                 
                 # Disable VAD processing on timeout
                 self._disable_vad_processing()
+                self.command_dispatcher.dispatch(DisableVadProcessingCommand())
                 
                 # Return to wake word detection state
                 self.state = DetectorState.WAKE_WORD
@@ -465,6 +474,9 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
         
         # Enable VAD processing only after wake word detection
         self._enable_vad_processing()
+        
+        # Also enable actual VAD audio processing
+        self.command_dispatcher.dispatch(EnableVadProcessingCommand())
     
     def _on_speech_detected(self, event: SpeechDetectedEvent) -> None:
         """
@@ -505,6 +517,9 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
             # Disable VAD processing after speech is processed
             self._disable_vad_processing()
             
+            # Also disable actual VAD audio processing to save resources
+            self.command_dispatcher.dispatch(DisableVadProcessingCommand())
+            
             # Return to wake word detection state after processing
             self.state = DetectorState.WAKE_WORD
     
@@ -531,6 +546,9 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
         
         # Explicitly disable VAD processing
         self._disable_vad_processing()
+        
+        # Also disable actual VAD audio processing
+        self.command_dispatcher.dispatch(DisableVadProcessingCommand())
         
         # Stop detection
         if self.is_detecting:

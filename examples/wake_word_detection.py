@@ -74,10 +74,15 @@ def main():
     is_wake_word_active = False
     vad_processing_enabled = False
     
+    # Debug print function for monitoring state changes
+    def debug_print(message):
+        if args.debug:
+            print(f"Debug - {message}")
+    
     # Register modules
     print(f"Initializing modules...")
     audio_module = AudioCaptureModule.register(command_dispatcher, event_bus)
-    vad_module = VadModule.register(command_dispatcher, event_bus)
+    vad_module = VadModule.register(command_dispatcher, event_bus, processing_enabled=False)  # Start with VAD disabled
     transcription_module = TranscriptionModule.register(command_dispatcher, event_bus)
     
     # Register wake word module with specified wake words and sensitivity
@@ -128,10 +133,28 @@ def main():
                     print(f"Debug - transcription result: {result}")
                 
                 # Print the result directly
-                if result and "text" in result:
-                    print(f"\n🎤 Final transcription: {result['text']} (confidence: {result.get('confidence', 0.0):.2f})")
+                if result:
+                    # TranscriptionModule.transcribe_audio returns a dictionary with text and other fields,
+                    # but the structure might be nested in a list of results
+                    if isinstance(result, list) and len(result) > 0:
+                        text = result[0].get('text', '')
+                        confidence = result[0].get('confidence', 0.0)
+                        print(f"\n🎤 Final transcription: {text} (confidence: {confidence:.2f})")
+                    elif isinstance(result, dict):
+                        if "text" in result:
+                            # Direct dictionary with text field
+                            print(f"\n🎤 Final transcription: {result['text']} (confidence: {result.get('confidence', 0.0):.2f})")
+                        elif "error" in result:
+                            # Error occurred
+                            print(f"\n❌ Transcription error: {result['error']}")
+                        else:
+                            # Dictionary structure without text field
+                            print(f"\n🎤 Final transcription: {result}")
+                    else:
+                        # Unknown result structure
+                        print(f"\n🎤 Transcription complete: {result}")
                 else:
-                    print(f"\nWarning - Missing 'text' in result: {result}")
+                    print("\nNo transcription result returned")
             except Exception as e:
                 print(f"Error transcribing speech: {e}")
                 if args.debug:
@@ -146,28 +169,37 @@ def main():
         """Monitor VAD processing status changes."""
         nonlocal vad_processing_enabled
         vad_processing_enabled = enabled
-        if args.debug:
-            print(f"Debug - VAD processing {'enabled' if enabled else 'disabled'}")
+        debug_print(f"VAD processing {'enabled' if enabled else 'disabled'}")
     
     def on_wake_word_detected(wake_word, confidence, timestamp):
         """Handle wake word detection events."""
-        nonlocal is_wake_word_active
+        nonlocal is_wake_word_active, vad_processing_enabled
         
         print(f"\n🔊 Wake word detected: '{wake_word}' (confidence: {confidence:.2f})")
         print("Listening for speech... (speak now)")
         
         # Set wake word active flag
         is_wake_word_active = True
+        
+        # Enable VAD processing when wake word is detected
+        VadModule.enable_processing(command_dispatcher)
+        vad_processing_enabled = True
+        debug_print("Explicitly enabled VAD processing after wake word")
     
     def on_wake_word_timeout(wake_word, timeout_duration):
         """Handle wake word timeout events."""
-        nonlocal is_wake_word_active
+        nonlocal is_wake_word_active, vad_processing_enabled
         
         print(f"\n⏱️ Timed out after {timeout_duration:.1f}s without speech")
         print(f"Listening for wake word '{args.wake_words}'...")
         
         # Reset wake word active flag
         is_wake_word_active = False
+        
+        # Disable VAD processing when timeout occurs
+        VadModule.disable_processing(command_dispatcher)
+        vad_processing_enabled = False
+        debug_print("Explicitly disabled VAD processing after timeout")
     
     def on_transcription_update(session_id, text, is_final, confidence):
         """Handle transcription update events."""
@@ -178,23 +210,28 @@ def main():
             # Print intermediate results on same line
             print(f"\r🎤 {text}", end="", flush=True)
     
-    # Subscribe to VAD events directly to handle proper state management
+    # Only subscribe to speech detected events for logging purposes
     def on_speech_detected(confidence, timestamp, speech_id):
         """Handle speech detected events, but only log when after wake word."""
         if is_wake_word_active:
+            debug_print(f"Speech detected after wake word with confidence {confidence:.2f}")
             print(f"Speech detected after wake word!")
     
     def on_silence_detected(speech_duration, start_time, end_time, speech_id):
         """Handle silence detected events, mainly for state management."""
-        nonlocal is_wake_word_active
+        nonlocal is_wake_word_active, vad_processing_enabled
         
         if is_wake_word_active:
             print(f"Processing speech after wake word (duration: {speech_duration:.2f}s)")
-            if args.debug:
-                print(f"Debug - on_silence_detected called, is_wake_word_active: {is_wake_word_active}, speech_id: {speech_id}")
+            debug_print(f"on_silence_detected called, is_wake_word_active: {is_wake_word_active}, speech_id: {speech_id}")
             
             # Reset wake word active flag - the handler will take care of processing
             is_wake_word_active = False
+            
+            # Explicitly disable VAD processing after speech is processed
+            VadModule.disable_processing(command_dispatcher)
+            vad_processing_enabled = False
+            debug_print("Explicitly disabled VAD processing after speech processing")
     
     # Subscribe to events
     WakeWordModule.on_wake_word_detected(event_bus, on_wake_word_detected)
@@ -219,6 +256,10 @@ def main():
         sys.exit(0)
     
     signal.signal(signal.SIGINT, signal_handler)
+    
+    # Verify VAD processing is actually disabled at startup
+    disabled_result = VadModule.disable_processing(command_dispatcher)
+    debug_print(f"Initial VAD disable result: {disabled_result}")
     
     # Print resource usage status
     print(f"👂 Wake word detection active (only wake word processing)")

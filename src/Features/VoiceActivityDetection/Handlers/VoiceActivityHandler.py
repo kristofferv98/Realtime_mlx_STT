@@ -23,6 +23,8 @@ from src.Features.AudioCapture.Models.AudioChunk import AudioChunk
 # Feature-specific imports
 from src.Features.VoiceActivityDetection.Commands.DetectVoiceActivityCommand import DetectVoiceActivityCommand
 from src.Features.VoiceActivityDetection.Commands.ConfigureVadCommand import ConfigureVadCommand
+from src.Features.VoiceActivityDetection.Commands.EnableVadProcessingCommand import EnableVadProcessingCommand
+from src.Features.VoiceActivityDetection.Commands.DisableVadProcessingCommand import DisableVadProcessingCommand
 from src.Features.VoiceActivityDetection.Events.SpeechDetectedEvent import SpeechDetectedEvent
 from src.Features.VoiceActivityDetection.Events.SilenceDetectedEvent import SilenceDetectedEvent
 from src.Features.VoiceActivityDetection.Detectors.WebRtcVadDetector import WebRtcVadDetector
@@ -63,6 +65,9 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         
         # Set default active detector
         self.active_detector_name = 'webrtc'  # Use WebRTC by default (lightweight)
+        
+        # Processing control - start with processing disabled to save resources
+        self.processing_enabled = False
         
         # State tracking
         self.in_speech = False
@@ -107,6 +112,10 @@ class VoiceActivityHandler(ICommandHandler[Any]):
             return self._handle_detect_voice_activity(command)
         elif isinstance(command, ConfigureVadCommand):
             return self._handle_configure_vad(command)
+        elif isinstance(command, EnableVadProcessingCommand):
+            return self._handle_enable_vad_processing(command)
+        elif isinstance(command, DisableVadProcessingCommand):
+            return self._handle_disable_vad_processing(command)
         else:
             raise TypeError(f"Unsupported command type: {type(command).__name__}")
     
@@ -122,7 +131,9 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         """
         return isinstance(command, (
             DetectVoiceActivityCommand,
-            ConfigureVadCommand
+            ConfigureVadCommand,
+            EnableVadProcessingCommand,
+            DisableVadProcessingCommand
         ))
     
     def _handle_detect_voice_activity(self, command: DetectVoiceActivityCommand) -> Union[bool, Dict[str, Any]]:
@@ -236,6 +247,46 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         
         return self.detectors[detector_name]
     
+    def _handle_enable_vad_processing(self, command: EnableVadProcessingCommand) -> bool:
+        """
+        Handle EnableVadProcessingCommand.
+        
+        This method enables VAD processing for audio chunks.
+        
+        Args:
+            command: The EnableVadProcessingCommand
+            
+        Returns:
+            bool: True to indicate successful execution
+        """
+        if not self.processing_enabled:
+            self.processing_enabled = True
+            self.logger.info("VAD audio processing enabled")
+        else:
+            self.logger.debug("VAD audio processing already enabled")
+            
+        return True
+        
+    def _handle_disable_vad_processing(self, command: DisableVadProcessingCommand) -> bool:
+        """
+        Handle DisableVadProcessingCommand.
+        
+        This method disables VAD processing for audio chunks to save resources.
+        
+        Args:
+            command: The DisableVadProcessingCommand
+            
+        Returns:
+            bool: True to indicate successful execution
+        """
+        if self.processing_enabled:
+            self.processing_enabled = False
+            self.logger.info("VAD audio processing disabled")
+        else:
+            self.logger.debug("VAD audio processing already disabled")
+            
+        return True
+    
     def _on_audio_chunk_captured(self, event: AudioChunkCapturedEvent) -> None:
         """
         Handle an audio chunk captured event.
@@ -249,7 +300,7 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         # Only process if we have an active detector
         if not self.active_detector_name:
             return
-        
+            
         audio_chunk = event.audio_chunk
         self.last_audio_timestamp = audio_chunk.timestamp
         
@@ -270,6 +321,10 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         # Update duration tracking
         self._pre_speech_durations.append(chunk_duration)
         self._pre_speech_buffer_duration += chunk_duration
+        
+        # Skip VAD processing if disabled - this is the key optimization
+        if not self.processing_enabled:
+            return
         
         try:
             # Skip using the command object entirely and call the detector directly

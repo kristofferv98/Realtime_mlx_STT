@@ -12,6 +12,8 @@ from src.Core.Commands.command_dispatcher import CommandDispatcher
 from src.Core.Events.event_bus import IEventBus
 from src.Features.VoiceActivityDetection.Commands.DetectVoiceActivityCommand import DetectVoiceActivityCommand
 from src.Features.VoiceActivityDetection.Commands.ConfigureVadCommand import ConfigureVadCommand
+from src.Features.VoiceActivityDetection.Commands.EnableVadProcessingCommand import EnableVadProcessingCommand
+from src.Features.VoiceActivityDetection.Commands.DisableVadProcessingCommand import DisableVadProcessingCommand
 from src.Features.VoiceActivityDetection.Events.SpeechDetectedEvent import SpeechDetectedEvent
 from src.Features.VoiceActivityDetection.Events.SilenceDetectedEvent import SilenceDetectedEvent
 from src.Features.VoiceActivityDetection.Handlers.VoiceActivityHandler import VoiceActivityHandler
@@ -30,7 +32,8 @@ class VadModule:
     def register(command_dispatcher: CommandDispatcher,
                 event_bus: IEventBus,
                 default_detector: str = "combined",  # Changed from "webrtc" to "combined" to use the two-stage approach
-                default_sensitivity: float = 0.7) -> VoiceActivityHandler:  # Increased from 0.5 for more conservative detection
+                default_sensitivity: float = 0.7,  # Increased from 0.5 for more conservative detection
+                processing_enabled: bool = False) -> VoiceActivityHandler:  # Default to disabled for resource efficiency
         """
         Register the VoiceActivityDetection feature with the system.
         
@@ -57,6 +60,8 @@ class VadModule:
         # Register with command dispatcher
         command_dispatcher.register_handler(DetectVoiceActivityCommand, handler)
         command_dispatcher.register_handler(ConfigureVadCommand, handler)
+        command_dispatcher.register_handler(EnableVadProcessingCommand, handler)
+        command_dispatcher.register_handler(DisableVadProcessingCommand, handler)
         
         # Configure default detector
         try:
@@ -69,6 +74,15 @@ class VadModule:
                 logger.info(f"Successfully configured {default_detector} detector with sensitivity {default_sensitivity}")
             else:
                 logger.warning(f"Failed to configure {default_detector} detector")
+            
+            # Set initial processing state
+            if processing_enabled:
+                command_dispatcher.dispatch(EnableVadProcessingCommand())
+                logger.info("VAD processing initially enabled")
+            else:
+                command_dispatcher.dispatch(DisableVadProcessingCommand())
+                logger.info("VAD processing initially disabled")
+                
         except Exception as e:
             logger.error(f"Error configuring default detector: {e}")
         
@@ -170,6 +184,40 @@ class VadModule:
                                event.speech_end_time,
                                event.speech_id
                            ))
+    
+    @staticmethod
+    def enable_processing(command_dispatcher: CommandDispatcher) -> bool:
+        """
+        Enable active processing of audio chunks for voice activity detection.
+        
+        When enabled, the VAD system actively processes each audio chunk through
+        detection algorithms, allowing for speech detection but consuming more CPU.
+        
+        Args:
+            command_dispatcher: The command dispatcher to use
+            
+        Returns:
+            bool: True if the command was successfully dispatched
+        """
+        command = EnableVadProcessingCommand()
+        return command_dispatcher.dispatch(command)
+    
+    @staticmethod
+    def disable_processing(command_dispatcher: CommandDispatcher) -> bool:
+        """
+        Disable active processing of audio chunks for voice activity detection.
+        
+        When disabled, the VAD system will still receive audio chunks but will skip
+        applying detection algorithms, significantly reducing CPU usage during idle periods.
+        
+        Args:
+            command_dispatcher: The command dispatcher to use
+            
+        Returns:
+            bool: True if the command was successfully dispatched
+        """
+        command = DisableVadProcessingCommand()
+        return command_dispatcher.dispatch(command)
     
     @staticmethod
     def on_speech_audio(event_bus: IEventBus,
