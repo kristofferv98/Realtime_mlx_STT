@@ -64,7 +64,9 @@ src/
 - **Transcription**: Processes audio using MLX-optimized Whisper models
 - **Event System**: Enables loose coupling between components
 
-## Usage Example
+## Usage Examples
+
+### Basic API Usage
 
 ```python
 from src.Application.Facade import RealtimeSTT
@@ -95,6 +97,37 @@ input("Press Enter to stop listening...")
 transcriber.stop_listening()
 transcriber.cleanup()
 ```
+
+### Included Example Scripts
+
+The repository includes several ready-to-use example scripts:
+
+1. **Continuous Transcription** - Captures and transcribes speech from your microphone:
+   ```bash
+   python examples/continuous_transcription.py
+   ```
+
+2. **Auto-Typing Transcription** - Transcribes speech and automatically types it into any application:
+   ```bash
+   # Install required dependency
+   uv pip install pyautogui
+   
+   # Run with default settings (typing latest text)
+   python examples/continuous_transcription_pasting.py
+   
+   # Run with full history mode (types all accumulated transcriptions)
+   python examples/continuous_transcription_pasting.py --paste-mode full
+   ```
+
+3. **File Transcription** - Transcribes audio from a file:
+   ```bash
+   python examples/transcribe_file.py path/to/audio/file.mp3
+   ```
+
+4. **Check Audio Devices** - Lists all available audio input devices:
+   ```bash
+   python examples/check_audio_devices.py
+   ```
 
 ## Testing
 

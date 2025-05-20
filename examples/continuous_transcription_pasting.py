@@ -64,7 +64,10 @@ try:
 except ImportError:
     PYAUTOGUI_AVAILABLE = False
     print("Warning: pyautogui is not installed. Auto-typing will not work.")
-    print("To enable auto-typing, install pyautogui: pip install pyautogui")
+    print("To enable auto-typing, install pyautogui using UV:")
+    print("  uv pip install pyautogui")
+    print("Or with pip:")
+    print("  pip install pyautogui")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
