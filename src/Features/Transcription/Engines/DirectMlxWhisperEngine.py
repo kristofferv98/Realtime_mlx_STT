@@ -241,7 +241,7 @@ def sinusoids(length, channels, max_timescale=10000):
     return mx.concatenate([mx.sin(scaled_time), mx.cos(scaled_time)], axis=1)
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=5)  # Most applications only use a few mel filter configurations
 def mel_filters(n_mels):
     """
     Get mel filterbank matrix.
@@ -263,7 +263,7 @@ def mel_filters(n_mels):
     return mx.load(path_mel)[f"mel_{n_mels}"]
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=10)  # Limited cache for window functions to prevent unbounded growth
 def hanning(n_fft):
     """
     Get Hanning window.
@@ -277,7 +277,7 @@ def hanning(n_fft):
     return mx.array(np.hanning(n_fft + 1)[:-1])
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=10)  # Limited cache for STFT operations to prevent unbounded growth
 def stft(x, window, nperseg=400, noverlap=160, nfft=None, axis=-1, pad_mode="reflect"):
     """
     Short-time Fourier transform.

@@ -60,14 +60,23 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
         self.logger = logging.getLogger(__name__)
         self.event_bus = event_bus
         
-        # Active sessions
+        # Active sessions with tracking for automatic cleanup
         self.sessions: Dict[str, TranscriptionSession] = {}
+        self.session_last_activity: Dict[str, float] = {}
+        
+        # Session expiry configuration
+        self.session_expiry_seconds = 600  # Default: expire sessions after 10 minutes of inactivity
+        self.max_sessions = 100  # Maximum number of simultaneous sessions to prevent memory issues
         
         # Transcription manager - using Direct implementation
         self.transcription_manager = DirectTranscriptionManager()
         
         # Default configuration
         self.default_config = TranscriptionConfig()
+        
+        # Session cleanup counter
+        self._cleanup_counter = 0
+        self._cleanup_interval = 20  # Check for expired sessions every 20 operations
         
         self.logger.info("Initialized TranscriptionCommandHandler")
     
@@ -285,8 +294,9 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
                 language=config.language
             )
             
-            # Store session
+            # Store session and track activity
             self.sessions[session.session_id] = session
+            self._update_session_activity(session.session_id)
             
             # Ensure transcription manager is running with correct configuration
             if not self.transcription_manager.is_running():
@@ -383,11 +393,8 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
             if command.save_results and command.output_path:
                 self._save_results(session, command.output_path)
             
-            # Close session
-            session.close()
-            
-            # Remove from active sessions
-            del self.sessions[command.session_id]
+            # Clean up session using our helper method
+            self._cleanup_session(command.session_id)
             
             # Stop transcription manager if no active sessions
             if not self.sessions and self.transcription_manager.is_running():
@@ -410,7 +417,16 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
         Returns:
             Optional[TranscriptionSession]: The session or None if not found
         """
-        return self.sessions.get(session_id)
+        session = self.sessions.get(session_id)
+        
+        # Update activity tracking if session exists
+        if session is not None:
+            self._update_session_activity(session_id)
+            
+        # Check for expired sessions periodically
+        self._check_expired_sessions()
+            
+        return session
     
     def _save_results(self, session: TranscriptionSession, output_path: str) -> None:
         """
@@ -505,9 +521,94 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
         # Publish event
         self.event_bus.publish(event)
     
+    def _check_expired_sessions(self, force: bool = False) -> None:
+        """
+        Check for and clean up expired sessions.
+        
+        This method is called periodically to remove inactive sessions
+        and prevent memory leaks. Sessions are considered expired if they
+        have had no activity for session_expiry_seconds.
+        
+        Args:
+            force: If True, force a cleanup regardless of counter
+        """
+        # Only check periodically unless forced
+        if not force:
+            self._cleanup_counter += 1
+            if self._cleanup_counter < self._cleanup_interval:
+                return
+            
+        # Reset counter
+        self._cleanup_counter = 0
+        
+        # Get current time
+        current_time = time.time()
+        expired_sessions = []
+        
+        # Find expired sessions
+        for session_id, last_activity in list(self.session_last_activity.items()):
+            if current_time - last_activity > self.session_expiry_seconds:
+                expired_sessions.append(session_id)
+                
+        # Clean up expired sessions
+        for session_id in expired_sessions:
+            self._cleanup_session(session_id)
+            
+        # Log if sessions were cleaned up
+        if expired_sessions:
+            self.logger.info(f"Cleaned up {len(expired_sessions)} expired sessions")
+    
+    def _cleanup_session(self, session_id: str) -> None:
+        """
+        Clean up a specific session and its resources.
+        
+        Args:
+            session_id: ID of the session to clean up
+        """
+        if session_id in self.sessions:
+            try:
+                # Get session
+                session = self.sessions[session_id]
+                
+                # Close session properly
+                session.close()
+                
+                # Remove from the sessions dictionary
+                del self.sessions[session_id]
+                
+                # Remove from last activity tracking
+                if session_id in self.session_last_activity:
+                    del self.session_last_activity[session_id]
+                    
+                self.logger.debug(f"Cleaned up session: {session_id}")
+            except Exception as e:
+                self.logger.error(f"Error cleaning up session {session_id}: {e}")
+    
+    def _update_session_activity(self, session_id: str) -> None:
+        """
+        Update the last activity timestamp for a session.
+        
+        Args:
+            session_id: ID of the session to update
+        """
+        self.session_last_activity[session_id] = time.time()
+        
+        # Check if we need to enforce the maximum sessions limit
+        if len(self.sessions) > self.max_sessions:
+            # Find oldest session by activity time
+            oldest_session_id = min(self.session_last_activity.items(), key=lambda x: x[1])[0]
+            self.logger.warning(f"Session limit reached, cleaning up oldest session: {oldest_session_id}")
+            self._cleanup_session(oldest_session_id)
+            
+        # Periodically check for expired sessions
+        self._check_expired_sessions()
+    
     def cleanup(self) -> None:
-        """Clean up resources used by the handler."""
+        """Clean up all resources used by the handler."""
         self.logger.info("Cleaning up TranscriptionCommandHandler")
+        
+        # Force cleanup of all expired sessions
+        self._check_expired_sessions(force=True)
         
         # Stop transcription manager
         if self.transcription_manager.is_running():
@@ -515,10 +616,14 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
         
         # Close all sessions
         for session_id, session in list(self.sessions.items()):
-            session.close()
+            try:
+                session.close()
+            except Exception as e:
+                self.logger.error(f"Error closing session {session_id}: {e}")
         
-        # Clear session dictionary
+        # Clear session dictionaries
         self.sessions.clear()
+        self.session_last_activity.clear()
 
     # Additional method to handle VAD events
     def on_silence_detected(self, session_id: str, audio_reference: Any, duration: float) -> None:

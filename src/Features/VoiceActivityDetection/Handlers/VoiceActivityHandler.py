@@ -81,6 +81,10 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         # Speech buffer: Contains the full speech segment, including pre-speech + active speech
         self.speech_buffer: Deque[AudioChunk] = deque(maxlen=self.buffer_limit)
         
+        # Optimization: Track pre-speech buffer duration for faster access
+        self._pre_speech_buffer_duration = 0.0
+        self._pre_speech_durations: Deque[float] = deque(maxlen=self.pre_speech_buffer_size)
+        
         # Register for audio events
         self.event_bus.subscribe(AudioChunkCapturedEvent, self._on_audio_chunk_captured)
     
@@ -198,16 +202,18 @@ class VoiceActivityHandler(ICommandHandler[Any]):
                 self.logger.info(f"Updating pre-speech buffer size from {self.pre_speech_buffer_size} to {new_size}")
                 self.pre_speech_buffer_size = new_size
                 
-                # Create a new buffer with new size, preserving data if possible
-                # First convert current buffer to list
-                current_data = list(self.pre_speech_buffer)
+                # Optimization: Preserve the existing data without unnecessary list conversion
+                # Create new deque directly with new maxlen
+                self.pre_speech_buffer = deque(self.pre_speech_buffer, maxlen=new_size)
                 
-                # Create new buffer with new size
-                self.pre_speech_buffer = deque(current_data, maxlen=new_size)
+                # Reset and rebuild duration tracking with the new buffer
+                self._pre_speech_durations = deque([chunk.get_duration() for chunk in self.pre_speech_buffer], maxlen=new_size)
+                self._pre_speech_buffer_duration = sum(self._pre_speech_durations)
                 
                 # Log the update
                 self.logger.info(f"Pre-speech buffer updated: size={new_size}, "
-                               f"containing {len(self.pre_speech_buffer)} chunks")
+                               f"containing {len(self.pre_speech_buffer)} chunks, "
+                               f"duration={self._pre_speech_buffer_duration:.2f}s")
         
         return success
     
@@ -247,9 +253,23 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         audio_chunk = event.audio_chunk
         self.last_audio_timestamp = audio_chunk.timestamp
         
-        # Always add new audio chunk to the pre-speech buffer
-        # This maintains a sliding window of recent audio regardless of speech detection
+        # Add new audio chunk to the pre-speech buffer and update duration tracking
+        chunk_duration = audio_chunk.get_duration()
+        
+        # If the buffer is full, we need to subtract the duration of the oldest chunk
+        if len(self.pre_speech_buffer) == self.pre_speech_buffer_size:
+            # When the buffer is full, appending will drop the oldest item
+            # So we need to keep track of the duration we're losing
+            if self._pre_speech_durations:
+                oldest_duration = self._pre_speech_durations[0]
+                self._pre_speech_buffer_duration -= oldest_duration
+        
+        # Add the new chunk to the buffer
         self.pre_speech_buffer.append(audio_chunk)
+        
+        # Update duration tracking
+        self._pre_speech_durations.append(chunk_duration)
+        self._pre_speech_buffer_duration += chunk_duration
         
         try:
             # Skip using the command object entirely and call the detector directly
@@ -283,21 +303,27 @@ class VoiceActivityHandler(ICommandHandler[Any]):
             self.in_speech = True
             self.current_speech_id = str(time.time_ns())
             
-            # Include pre-speech buffer in the speech buffer to capture audio before detection
-            # Create a copy of the pre-speech buffer to avoid reference issues
-            pre_speech_chunks = list(self.pre_speech_buffer)
-            
-            # Calculate the duration of the pre-speech buffer for timing adjustment
-            pre_speech_duration = sum(chunk.get_duration() for chunk in pre_speech_chunks)
+            # Use the pre-calculated duration for the pre-speech buffer
+            # This avoids recalculating durations for each chunk
+            pre_speech_duration = self._pre_speech_buffer_duration
             
             # Adjust speech start time to account for pre-speech buffer
             self.speech_start_time = current_time - pre_speech_duration
             
             # Initialize speech buffer with pre-speech chunks plus current chunk
-            self.speech_buffer = deque(pre_speech_chunks + [audio_chunk], maxlen=self.buffer_limit)
+            # Using a direct approach to avoid unnecessary list conversion
+            buffer_size = len(self.pre_speech_buffer)
+            self.speech_buffer.clear()
+            
+            # Add pre-speech buffer contents
+            for chunk in self.pre_speech_buffer:
+                self.speech_buffer.append(chunk)
+                
+            # Add current chunk
+            self.speech_buffer.append(audio_chunk)
             
             # Log the pre-speech buffer inclusion
-            self.logger.info(f"Including {len(pre_speech_chunks)} pre-speech chunks "
+            self.logger.info(f"Including {buffer_size} pre-speech chunks "
                            f"({pre_speech_duration:.2f}s) in speech detection")
             
             # Publish speech detected event
@@ -326,26 +352,30 @@ class VoiceActivityHandler(ICommandHandler[Any]):
             
             if len(self.speech_buffer) > 0:
                 try:
-                    # First check if all arrays have the same shape
-                    raw_data_list = []
+                    # Calculate total size in advance to pre-allocate memory
+                    total_size = 0
                     for chunk in self.speech_buffer:
-                        # Use the to_float32 method to get normalized numpy array
                         chunk_data = chunk.to_float32()
                         if chunk_data is not None and chunk_data.size > 0:
-                            # Ensure it's at least 1D
-                            if chunk_data.ndim == 0:
-                                chunk_data = np.array([chunk_data.item()], dtype=np.float32)
-                            raw_data_list.append(chunk_data)
+                            total_size += chunk_data.size
                     
-                    if raw_data_list:
-                        # Combine all valid audio chunks into a single numpy array
-                        audio_data = np.concatenate(raw_data_list)
+                    if total_size > 0:
+                        # Pre-allocate array of correct size to avoid multiple resizes
+                        audio_data = np.zeros(total_size, dtype=np.float32)
                         
-                        # Ensure the array is the right type and normalized
-                        if audio_data.dtype != np.float32:
-                            audio_data = audio_data.astype(np.float32)
+                        # Fill the pre-allocated array
+                        position = 0
+                        for chunk in self.speech_buffer:
+                            chunk_data = chunk.to_float32()
+                            if chunk_data is not None and chunk_data.size > 0:
+                                # Copy data to the right position
+                                chunk_size = chunk_data.size
+                                audio_data[position:position+chunk_size] = chunk_data
+                                position += chunk_size
                         
-                        # Normalize if not already in [-1, 1] range
+                        # No need to convert type as we created float32 array directly
+                        
+                        # Check if normalization is needed
                         max_val = np.max(np.abs(audio_data))
                         if max_val > 0 and max_val > 1.0:
                             audio_data = audio_data / max_val
@@ -387,8 +417,19 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         for detector in self.detectors.values():
             detector.cleanup()
         
-        # Clear buffers
+        # Clear all buffers to free memory
         self.speech_buffer.clear()
+        self.pre_speech_buffer.clear()
+        self._pre_speech_durations.clear()
+        
+        # Reset counters and tracking
+        self._pre_speech_buffer_duration = 0.0
+        
+        # Remove detector references
+        self.detectors.clear()
+        
+        # Log cleanup
+        self.logger.info("VoiceActivityHandler resources cleaned up")
         
     def get_buffer_duration(self) -> float:
         """
