@@ -681,10 +681,14 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
             # TEMPORARY DEBUG: Save audio to debug directory for debugging
             try:
                 import os.path
+                # Ensure we're saving to the debug directory, not project root
                 base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
                 debug_dir = os.path.join(base_dir, "debug")
                 os.makedirs(debug_dir, exist_ok=True)
-                debug_path = os.path.join(debug_dir, "latest_speech.wav")
+                
+                # Use timestamp in filename to avoid overwriting previous files
+                timestamp = int(time.time())
+                debug_path = os.path.join(debug_dir, f"speech_{timestamp}.wav")
                 sf.write(debug_path, audio_reference, 16000, format='WAV', subtype='PCM_16')
                 self.logger.info(f"DEBUGGING: Saved audio to debug dir: {debug_path}")
             except Exception as e:

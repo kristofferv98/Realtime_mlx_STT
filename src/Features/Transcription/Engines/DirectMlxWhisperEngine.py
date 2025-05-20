@@ -986,10 +986,16 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                 try:
                     import soundfile as sf
                     import os.path
+                    import time
+                    
+                    # Ensure we're saving to the debug directory, not project root
                     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
                     debug_dir = os.path.join(base_dir, "debug")
                     os.makedirs(debug_dir, exist_ok=True)
-                    debug_path = os.path.join(debug_dir, "latest_speech.wav")
+                    
+                    # Use timestamp in filename to avoid overwriting previous files and conflicts
+                    timestamp = int(time.time())
+                    debug_path = os.path.join(debug_dir, f"engine_{timestamp}.wav")
                     sf.write(debug_path, audio, self.sample_rate)
                     self.logger.info(f"DEBUGGING: Saved audio chunk to: {debug_path}")
                 except Exception as e:
