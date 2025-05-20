@@ -3,7 +3,11 @@
 Wake word detection example.
 
 This script demonstrates how to use the wake word detection functionality
-to trigger transcription only after a wake word is detected.
+to trigger transcription only after a wake word is detected. It implements
+a two-stage activation approach for improved efficiency:
+
+1. First stage: Only wake word detection runs continuously
+2. Second stage: VAD and transcription activated only after wake word detection
 """
 
 import os
@@ -33,6 +37,8 @@ def main():
                         help="Porcupine access key (will check PORCUPINE_ACCESS_KEY env var if not provided)")
     parser.add_argument("--timeout", type=float, default=5.0,
                         help="Timeout in seconds to wait for speech after wake word detection")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable debug output for VAD and wake word processing")
     
     args = parser.parse_args()
     
@@ -56,13 +62,17 @@ def main():
     # Setup logging
     import logging
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.INFO if not args.debug else logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler("logs/wake_word_example.log"),
             logging.StreamHandler()
         ]
     )
+    
+    # Variables to track state
+    is_wake_word_active = False
+    vad_processing_enabled = False
     
     # Register modules
     print(f"Initializing modules...")
@@ -83,12 +93,16 @@ def main():
     from src.Features.VoiceActivityDetection.Events.SilenceDetectedEvent import SilenceDetectedEvent
     from src.Features.VoiceActivityDetection.Events.SpeechDetectedEvent import SpeechDetectedEvent
     from src.Features.WakeWordDetection.Events.WakeWordDetectedEvent import WakeWordDetectedEvent
+    from src.Features.WakeWordDetection.Events.WakeWordTimeoutEvent import WakeWordTimeoutEvent
     
     # Create a special SilenceDetectedEvent handler that only processes events when wake word is active
     def conditional_silence_handler(event):
-        print(f"\nDebug - conditional_silence_handler called, is_wake_word_active: {is_wake_word_active}")
-        print(f"Debug - event has audio_reference: {hasattr(event, 'audio_reference')}")
-        print(f"Debug - audio_reference is not None: {hasattr(event, 'audio_reference') and event.audio_reference is not None}")
+        if args.debug:
+            print(f"\nDebug - conditional_silence_handler called")
+            print(f"Debug - is_wake_word_active: {is_wake_word_active}")
+            print(f"Debug - vad_processing_enabled: {vad_processing_enabled}")
+            print(f"Debug - event has audio_reference: {hasattr(event, 'audio_reference')}")
+            print(f"Debug - audio_reference is not None: {hasattr(event, 'audio_reference') and event.audio_reference is not None}")
         
         if is_wake_word_active and hasattr(event, 'audio_reference') and event.audio_reference is not None:
             # Process the complete speech segment with transcription
@@ -99,7 +113,8 @@ def main():
                 
                 # Use transcribe_audio with the audio reference
                 audio_data = event.audio_reference
-                print(f"Debug - audio_data type: {type(audio_data)}, shape/len: {getattr(audio_data, 'shape', len(audio_data) if hasattr(audio_data, '__len__') else 'unknown')}")
+                if args.debug:
+                    print(f"Debug - audio_data type: {type(audio_data)}, shape/len: {getattr(audio_data, 'shape', len(audio_data) if hasattr(audio_data, '__len__') else 'unknown')}")
                 
                 result = TranscriptionModule.transcribe_audio(
                     command_dispatcher,
@@ -109,7 +124,8 @@ def main():
                     is_last_chunk=True
                 )
                 
-                print(f"Debug - transcription result: {result}")
+                if args.debug:
+                    print(f"Debug - transcription result: {result}")
                 
                 # Print the result directly
                 if result and "text" in result:
@@ -118,17 +134,30 @@ def main():
                     print(f"\nWarning - Missing 'text' in result: {result}")
             except Exception as e:
                 print(f"Error transcribing speech: {e}")
-                import traceback
-                traceback.print_exc()
+                if args.debug:
+                    import traceback
+                    traceback.print_exc()
     
     # Register our special handler with the event bus
     event_bus.subscribe(SilenceDetectedEvent, conditional_silence_handler)
     
     # Set up event handlers
+    def on_vad_status_change(enabled):
+        """Monitor VAD processing status changes."""
+        nonlocal vad_processing_enabled
+        vad_processing_enabled = enabled
+        if args.debug:
+            print(f"Debug - VAD processing {'enabled' if enabled else 'disabled'}")
+    
     def on_wake_word_detected(wake_word, confidence, timestamp):
         """Handle wake word detection events."""
+        nonlocal is_wake_word_active
+        
         print(f"\n🔊 Wake word detected: '{wake_word}' (confidence: {confidence:.2f})")
         print("Listening for speech... (speak now)")
+        
+        # Set wake word active flag
+        is_wake_word_active = True
     
     def on_wake_word_timeout(wake_word, timeout_duration):
         """Handle wake word timeout events."""
@@ -149,9 +178,6 @@ def main():
             # Print intermediate results on same line
             print(f"\r🎤 {text}", end="", flush=True)
     
-    # Variables to track state
-    is_wake_word_active = False
-    
     # Subscribe to VAD events directly to handle proper state management
     def on_speech_detected(confidence, timestamp, speech_id):
         """Handle speech detected events, but only log when after wake word."""
@@ -164,35 +190,11 @@ def main():
         
         if is_wake_word_active:
             print(f"Processing speech after wake word (duration: {speech_duration:.2f}s)")
-            print(f"Debug - on_silence_detected called, is_wake_word_active: {is_wake_word_active}, speech_id: {speech_id}")
+            if args.debug:
+                print(f"Debug - on_silence_detected called, is_wake_word_active: {is_wake_word_active}, speech_id: {speech_id}")
             
-            # IMPORTANT: We need to reset wake_word_active, but ONLY after transcription has been processed
-            # Reset it after a delay to allow the conditional handler to process first
-            def delayed_reset():
-                nonlocal is_wake_word_active
-                time.sleep(2)  # Give transcription time to process
-                print("Debug - Resetting is_wake_word_active to False now")
-                is_wake_word_active = False
-                
-            # Start a thread to reset the flag after a delay
-            import threading
-            reset_thread = threading.Thread(target=delayed_reset)
-            reset_thread.daemon = True
-            reset_thread.start()
-            
-            # The transcription part is handled by our conditional_silence_handler
-            # which has direct access to the audio data
-    
-    # Enhanced wake word detection handler
-    def on_wake_word_detected(wake_word, confidence, timestamp):
-        """Handle wake word detection events."""
-        nonlocal is_wake_word_active
-        
-        print(f"\n🔊 Wake word detected: '{wake_word}' (confidence: {confidence:.2f})")
-        print("Listening for speech... (speak now)")
-        
-        # Set wake word active flag
-        is_wake_word_active = True
+            # Reset wake word active flag - the handler will take care of processing
+            is_wake_word_active = False
     
     # Subscribe to events
     WakeWordModule.on_wake_word_detected(event_bus, on_wake_word_detected)
@@ -217,6 +219,12 @@ def main():
         sys.exit(0)
     
     signal.signal(signal.SIGINT, signal_handler)
+    
+    # Print resource usage status
+    print(f"👂 Wake word detection active (only wake word processing)")
+    print(f"🔊 VAD processing disabled (will be activated after wake word)")
+    print(f"💤 System is in low-power mode until wake word is detected")
+    print(f"Say '{args.wake_words}' to activate")
     
     # Keep main thread alive
     try:

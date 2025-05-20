@@ -90,11 +90,13 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
         self.audio_buffer: Deque[AudioChunk] = deque(maxlen=self.buffer_size)
         self.last_audio_timestamp = 0.0
         
-        # VAD subscription state
+        # VAD subscription state - start disabled
         self.vad_subscribed = False
         
-        # Register for audio events
+        # Register for audio events - only audio is needed for wake word detection
         self.event_bus.subscribe(AudioChunkCapturedEvent, self._on_audio_chunk_captured)
+        
+        # Do NOT subscribe to VAD events here - will be subscribed dynamically
     
     def handle(self, command: Command) -> Any:
         """
@@ -225,11 +227,8 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
         self.wake_word_name = ""
         self.listening_for_speech = False
         
-        # Reset VAD subscription state
-        if self.vad_subscribed:
-            self.event_bus.unsubscribe(SpeechDetectedEvent, self._on_speech_detected)
-            self.event_bus.unsubscribe(SilenceDetectedEvent, self._on_silence_detected)
-            self.vad_subscribed = False
+        # Ensure VAD subscription is disabled at start
+        self._disable_vad_processing()
         
         # Get detector
         detector = self._get_detector(self.active_detector_name)
@@ -274,11 +273,8 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
         self.wake_word_name = ""
         self.listening_for_speech = False
         
-        # Unsubscribe from VAD events if subscribed
-        if self.vad_subscribed:
-            self.event_bus.unsubscribe(SpeechDetectedEvent, self._on_speech_detected)
-            self.event_bus.unsubscribe(SilenceDetectedEvent, self._on_silence_detected)
-            self.vad_subscribed = False
+        # Explicitly disable VAD processing
+        self._disable_vad_processing()
         
         # Publish event
         self.event_bus.publish(WakeWordDetectionStoppedEvent(
@@ -345,6 +341,22 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
         
         return self.detectors[detector_name]
     
+    def _enable_vad_processing(self) -> None:
+        """Enable VAD processing by subscribing to VAD events."""
+        if not self.vad_subscribed:
+            self.event_bus.subscribe(SpeechDetectedEvent, self._on_speech_detected)
+            self.event_bus.subscribe(SilenceDetectedEvent, self._on_silence_detected)
+            self.vad_subscribed = True
+            self.logger.info("VAD event processing enabled")
+    
+    def _disable_vad_processing(self) -> None:
+        """Disable VAD processing by unsubscribing from VAD events."""
+        if self.vad_subscribed:
+            self.event_bus.unsubscribe(SpeechDetectedEvent, self._on_speech_detected)
+            self.event_bus.unsubscribe(SilenceDetectedEvent, self._on_silence_detected)
+            self.vad_subscribed = False
+            self.logger.info("VAD event processing disabled")
+    
     def _on_audio_chunk_captured(self, event: AudioChunkCapturedEvent) -> None:
         """
         Handle an audio chunk captured event.
@@ -388,11 +400,8 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
                 self.wake_word_name = ""
                 self.listening_for_speech = False
                 
-                # Unsubscribe from VAD events if subscribed
-                if self.vad_subscribed:
-                    self.event_bus.unsubscribe(SpeechDetectedEvent, self._on_speech_detected)
-                    self.event_bus.unsubscribe(SilenceDetectedEvent, self._on_silence_detected)
-                    self.vad_subscribed = False
+                # Disable VAD processing on timeout
+                self._disable_vad_processing()
                 
                 # Return to wake word detection state
                 self.state = DetectorState.WAKE_WORD
@@ -454,11 +463,8 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
             )
         )
         
-        # Subscribe to VAD events if not already subscribed
-        if not self.vad_subscribed:
-            self.event_bus.subscribe(SpeechDetectedEvent, self._on_speech_detected)
-            self.event_bus.subscribe(SilenceDetectedEvent, self._on_silence_detected)
-            self.vad_subscribed = True
+        # Enable VAD processing only after wake word detection
+        self._enable_vad_processing()
     
     def _on_speech_detected(self, event: SpeechDetectedEvent) -> None:
         """
@@ -496,6 +502,9 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
             self.wake_word_name = ""
             self.listening_for_speech = False
             
+            # Disable VAD processing after speech is processed
+            self._disable_vad_processing()
+            
             # Return to wake word detection state after processing
             self.state = DetectorState.WAKE_WORD
     
@@ -520,10 +529,8 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
         # Unsubscribe from events
         self.event_bus.unsubscribe(AudioChunkCapturedEvent, self._on_audio_chunk_captured)
         
-        if self.vad_subscribed:
-            self.event_bus.unsubscribe(SpeechDetectedEvent, self._on_speech_detected)
-            self.event_bus.unsubscribe(SilenceDetectedEvent, self._on_silence_detected)
-            self.vad_subscribed = False
+        # Explicitly disable VAD processing
+        self._disable_vad_processing()
         
         # Stop detection
         if self.is_detecting:
