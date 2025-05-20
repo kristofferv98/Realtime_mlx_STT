@@ -24,6 +24,9 @@ class ConfigureVadCommand(Command):
         window_size: Number of frames to consider for detection decisions
         min_speech_duration: Minimum speech segment duration in seconds
         speech_pad_ms: Additional padding in ms to add before/after speech
+        pre_speech_buffer_size: Number of audio chunks to keep in pre-speech buffer
+                              Larger values capture more audio before speech detection
+                              Recommended: 64 (equivalent to ~2 seconds at 32ms/chunk)
         parameters: Additional detector-specific parameters
     """
     
@@ -33,6 +36,7 @@ class ConfigureVadCommand(Command):
     window_size: int = 5
     min_speech_duration: float = 0.25
     speech_pad_ms: int = 100
+    pre_speech_buffer_size: int = 64  # ~2 seconds at 32ms/chunk
     parameters: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):
@@ -56,6 +60,17 @@ class ConfigureVadCommand(Command):
         
         if self.min_speech_duration < 0:
             raise ValueError(f"Minimum speech duration cannot be negative, got {self.min_speech_duration}")
+            
+        if self.pre_speech_buffer_size < 1:
+            raise ValueError(f"Pre-speech buffer size must be at least 1, got {self.pre_speech_buffer_size}")
+        elif self.pre_speech_buffer_size < 16:
+            # Warning for small buffer sizes, but still allow them
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Pre-speech buffer size is very small ({self.pre_speech_buffer_size}). "
+                f"This may not capture enough audio before speech detection. "
+                f"Recommended minimum size is 16 chunks (~0.5 seconds)."
+            )
         
     def map_to_detector_config(self) -> Dict[str, Any]:
         """
@@ -68,6 +83,9 @@ class ConfigureVadCommand(Command):
         
         # Common parameters
         config['sample_rate'] = self.parameters.get('sample_rate', 16000)
+        
+        # Always include pre-speech buffer size in configuration
+        config['pre_speech_buffer_size'] = self.pre_speech_buffer_size
         
         # Parameters based on detector type
         if self.detector_type == 'webrtc':
@@ -84,6 +102,9 @@ class ConfigureVadCommand(Command):
             config['webrtc_aggressiveness'] = int(self.sensitivity * 3)  # 0-3 scale
             config['silero_threshold'] = 0.3 + (self.sensitivity * 0.5)  # 0.3-0.8 scale
             config['speech_confirmation_frames'] = max(1, int(self.window_size / 2))
+            # Reduce from 3 to 2 frames for faster detection
+            if self.parameters.get('faster_detection', True) and config['speech_confirmation_frames'] > 2:
+                config['speech_confirmation_frames'] = 2
             config['silence_confirmation_frames'] = self.window_size
             
         # Include any additional parameters from the parameters dict

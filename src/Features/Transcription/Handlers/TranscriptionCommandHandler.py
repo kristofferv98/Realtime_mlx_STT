@@ -573,13 +573,15 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
                 rms = np.sqrt(np.mean(np.square(audio_reference)))
                 self.logger.info(f"Audio RMS energy level: {rms:.4f}")
             
-            # TEMPORARY DEBUG: Also save a copy to the project base directory for debugging
+            # TEMPORARY DEBUG: Save audio to debug directory for debugging
             try:
                 import os.path
                 base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
-                debug_path = os.path.join(base_dir, "latest_speech.wav")
+                debug_dir = os.path.join(base_dir, "debug")
+                os.makedirs(debug_dir, exist_ok=True)
+                debug_path = os.path.join(debug_dir, "latest_speech.wav")
                 sf.write(debug_path, audio_reference, 16000, format='WAV', subtype='PCM_16')
-                self.logger.info(f"DEBUGGING: Saved audio to project dir: {debug_path}")
+                self.logger.info(f"DEBUGGING: Saved audio to debug dir: {debug_path}")
             except Exception as e:
                 self.logger.error(f"Error saving debug audio file: {e}")
             

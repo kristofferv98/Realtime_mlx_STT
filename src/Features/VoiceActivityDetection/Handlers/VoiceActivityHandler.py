@@ -69,8 +69,17 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         self.current_speech_id = ""
         self.speech_start_time = 0.0
         self.last_audio_timestamp = 0.0
-        self.speech_buffer: Deque[AudioChunk] = deque(maxlen=10000)  # Buffer with automatic size limiting - increased to handle 5+ minutes
-        self.buffer_limit = 10000  # Maximum number of chunks to buffer (increased to 10000 for 5+ minute speech)
+        
+        # Buffer configuration
+        self.buffer_limit = 10000  # Maximum number of chunks to buffer (for 5+ minutes of speech)
+        self.pre_speech_buffer_size = 64  # ~2 seconds at 32ms/chunk
+        
+        # Buffers
+        # Pre-speech buffer: Continuously maintains the last N chunks of audio, even before speech is detected
+        self.pre_speech_buffer: Deque[AudioChunk] = deque(maxlen=self.pre_speech_buffer_size)
+        
+        # Speech buffer: Contains the full speech segment, including pre-speech + active speech
+        self.speech_buffer: Deque[AudioChunk] = deque(maxlen=self.buffer_limit)
         
         # Register for audio events
         self.event_bus.subscribe(AudioChunkCapturedEvent, self._on_audio_chunk_captured)
@@ -178,6 +187,27 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         # Update buffer limit if specified
         if 'buffer_limit' in command.parameters:
             self.buffer_limit = command.parameters['buffer_limit']
+            
+        # Update pre-speech buffer size if specified
+        if 'pre_speech_buffer_size' in config:
+            # Get the new buffer size
+            new_size = config['pre_speech_buffer_size']
+            
+            # Only update if it's different from current size
+            if new_size != self.pre_speech_buffer_size:
+                self.logger.info(f"Updating pre-speech buffer size from {self.pre_speech_buffer_size} to {new_size}")
+                self.pre_speech_buffer_size = new_size
+                
+                # Create a new buffer with new size, preserving data if possible
+                # First convert current buffer to list
+                current_data = list(self.pre_speech_buffer)
+                
+                # Create new buffer with new size
+                self.pre_speech_buffer = deque(current_data, maxlen=new_size)
+                
+                # Log the update
+                self.logger.info(f"Pre-speech buffer updated: size={new_size}, "
+                               f"containing {len(self.pre_speech_buffer)} chunks")
         
         return success
     
@@ -217,6 +247,10 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         audio_chunk = event.audio_chunk
         self.last_audio_timestamp = audio_chunk.timestamp
         
+        # Always add new audio chunk to the pre-speech buffer
+        # This maintains a sliding window of recent audio regardless of speech detection
+        self.pre_speech_buffer.append(audio_chunk)
+        
         try:
             # Skip using the command object entirely and call the detector directly
             detector = self._get_detector(self.active_detector_name)
@@ -247,16 +281,31 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         # Transition from silence to speech
         if is_speech and not self.in_speech:
             self.in_speech = True
-            self.speech_start_time = current_time
             self.current_speech_id = str(time.time_ns())
-            self.speech_buffer = deque([audio_chunk], maxlen=self.buffer_limit)
+            
+            # Include pre-speech buffer in the speech buffer to capture audio before detection
+            # Create a copy of the pre-speech buffer to avoid reference issues
+            pre_speech_chunks = list(self.pre_speech_buffer)
+            
+            # Calculate the duration of the pre-speech buffer for timing adjustment
+            pre_speech_duration = sum(chunk.get_duration() for chunk in pre_speech_chunks)
+            
+            # Adjust speech start time to account for pre-speech buffer
+            self.speech_start_time = current_time - pre_speech_duration
+            
+            # Initialize speech buffer with pre-speech chunks plus current chunk
+            self.speech_buffer = deque(pre_speech_chunks + [audio_chunk], maxlen=self.buffer_limit)
+            
+            # Log the pre-speech buffer inclusion
+            self.logger.info(f"Including {len(pre_speech_chunks)} pre-speech chunks "
+                           f"({pre_speech_duration:.2f}s) in speech detection")
             
             # Publish speech detected event
             self.event_bus.publish(SpeechDetectedEvent(
                 confidence=confidence,
                 audio_timestamp=audio_chunk.timestamp,
                 detector_type=self.active_detector_name,
-                audio_reference=audio_chunk,
+                audio_reference=audio_chunk,  # Keep using current chunk as reference for compatibility
                 speech_id=self.current_speech_id
             ))
             self.logger.debug(f"Speech started with confidence {confidence:.2f}")

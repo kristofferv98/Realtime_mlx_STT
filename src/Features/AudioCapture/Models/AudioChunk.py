@@ -60,3 +60,19 @@ class AudioChunk:
         
         # Default conversion
         return self.numpy_data.astype(np.float32)
+        
+    def get_duration(self) -> float:
+        """
+        Calculate the duration of this audio chunk in seconds.
+        
+        Returns:
+            float: Duration in seconds
+        """
+        # Calculate based on the number of samples and sample rate
+        num_samples = len(self.numpy_data)
+        if self.channels > 1:
+            # If stereo or multi-channel, adjust the sample count
+            num_samples = num_samples // self.channels
+            
+        # Duration = samples / sample_rate
+        return num_samples / self.sample_rate

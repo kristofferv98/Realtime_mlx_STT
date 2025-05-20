@@ -43,10 +43,10 @@ class CombinedVadDetector(IVoiceActivityDetector):
     
     def __init__(self, 
                  webrtc_aggressiveness: int = 2,
-                 silero_threshold: float = 0.5,
+                 silero_threshold: float = 0.4,  # Reduced from 0.5 for earlier detection
                  sample_rate: int = 16000,
                  frame_duration_ms: int = 30,
-                 speech_confirmation_frames: int = 3,
+                 speech_confirmation_frames: int = 2,  # Reduced from 3 for faster detection
                  silence_confirmation_frames: int = 30,  # Increased to 30 to allow for longer pauses in extended speech
                  speech_buffer_size: int = 100,  # Increased to 100 for better tracking of long speech segments
                  webrtc_threshold: float = 0.6,
