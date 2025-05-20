@@ -116,7 +116,7 @@ class VadModule:
             detector_type: Type of VAD detector to use
             sensitivity: Sensitivity level (0.0-1.0)
                 For 'combined' detector, this affects the Silero threshold
-                while WebRTC threshold is set internally (current default: 0.8)
+                while WebRTC threshold is fixed at 0.6 for better sensitivity
             window_size: Number of frames to consider
             min_speech_duration: Minimum speech segment duration in seconds
             **kwargs: Additional detector-specific parameters

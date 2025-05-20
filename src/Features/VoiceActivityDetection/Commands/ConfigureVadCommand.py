@@ -101,6 +101,7 @@ class ConfigureVadCommand(Command):
         elif self.detector_type == 'combined':
             config['webrtc_aggressiveness'] = int(self.sensitivity * 3)  # 0-3 scale
             config['silero_threshold'] = 0.3 + (self.sensitivity * 0.5)  # 0.3-0.8 scale
+            config['webrtc_threshold'] = 0.6  # Fixed threshold for more sensitive detection
             config['speech_confirmation_frames'] = max(1, int(self.window_size / 2))
             # Reduce from 3 to 2 frames for faster detection
             if self.parameters.get('faster_detection', True) and config['speech_confirmation_frames'] > 2:

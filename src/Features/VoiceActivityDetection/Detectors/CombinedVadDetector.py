@@ -49,7 +49,7 @@ class CombinedVadDetector(IVoiceActivityDetector):
                  speech_confirmation_frames: int = 2,  # Reduced from 3 for faster detection
                  silence_confirmation_frames: int = 30,  # Increased to 30 to allow for longer pauses in extended speech
                  speech_buffer_size: int = 100,  # Increased to 100 for better tracking of long speech segments
-                 webrtc_threshold: float = 0.8,  # Increased from 0.6 for more conservative detection
+                 webrtc_threshold: float = 0.6,  # Decreased from 0.8 for more sensitive detection
                  use_silero_confirmation: bool = True):
         """
         Initialize the Combined VAD detector.
