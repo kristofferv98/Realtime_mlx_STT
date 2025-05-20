@@ -9,7 +9,13 @@ real-time transcription, and automatic text insertion (as if typing). It:
 2. Performs VAD to detect speech segments
 3. Transcribes complete speech segments when silence is detected
 4. Prints the transcribed text to the terminal
-5. Automatically types the transcribed text into the active application
+5. Automatically pastes the transcribed text into the active application
+
+Features:
+- Uses the clipboard and Command+V shortcut for pasting, ensuring proper handling of
+  international character sets and keyboard layouts (Norwegian, etc.)
+- Falls back to direct typing only if clipboard method fails
+- Supports both latest-only and full-history modes
 
 Press Ctrl+C to stop recording and exit.
 """
@@ -103,13 +109,30 @@ def auto_type_text(text):
         # Give the user a moment to switch to their target application
         time.sleep(0.5)
         
-        # Type the text
-        pyautogui.write(text)
-        logger.info("Text has been auto-typed.")
+        # Method 1: Use the clipboard for accurate character support
+        # This avoids keyboard layout issues by using the system clipboard
+        # which correctly handles all Unicode characters and special symbols
+        import subprocess
+        
+        # Copy the text to clipboard
+        process = subprocess.Popen('pbcopy', env={'LANG': 'en_US.UTF-8'}, stdin=subprocess.PIPE)
+        process.communicate(text.encode('utf-8'))
+        
+        # Paste the text using keyboard shortcut (Command+V)
+        pyautogui.hotkey('command', 'v')
+        
+        logger.info("Text has been pasted via clipboard for accurate character support.")
         return True
     except Exception as e:
         logger.error(f"Failed to auto-type text: {e}")
-        return False
+        
+        # Fallback: try direct typing if clipboard method fails
+        try:
+            logger.info("Attempting direct typing as fallback...")
+            pyautogui.write(text)
+            return True
+        except:
+            return False
 
 
 class ContinuousTranscriptionApp:
@@ -232,9 +255,9 @@ class ContinuousTranscriptionApp:
                     
                 print("-" * 80)
                 if success:
-                    print(f"✓ Auto-typed: {'Full history' if self.paste_mode == 'full' else 'Latest text'}")
+                    print(f"✓ Pasted: {'Full history' if self.paste_mode == 'full' else 'Latest text'}")
                 else:
-                    print("⚠ Failed to auto-type text")
+                    print("⚠ Failed to paste text")
         
         # Track speech stats
         def on_speech_detected(confidence, timestamp, speech_id):
@@ -423,12 +446,13 @@ class ContinuousTranscriptionApp:
             return False
         
         print("\n" + "=" * 80)
-        print("CONTINUOUS TRANSCRIPTION WITH AUTO-TYPING")
+        print("CONTINUOUS TRANSCRIPTION WITH AUTO-PASTING")
         print("=" * 80)
         print(f"✓ Recording started on device [{self.device_index}]")
-        print(f"✓ Auto-typing mode: {self.paste_mode.upper()}")
-        print(f"✓ After each transcription, text will be typed automatically")
+        print(f"✓ Paste mode: {self.paste_mode.upper()}")
+        print(f"✓ After each transcription, text will be pasted using Command+V")
         print(f"✓ Focus your cursor where you want text to appear")
+        print(f"✓ Using clipboard method for international keyboard support (Norwegian etc.)")
         print("=" * 80)
         print("Press Ctrl+C to stop.")
         
@@ -467,10 +491,10 @@ class ContinuousTranscriptionApp:
             print(full_history)
             print("=" * 80)
             
-            # Auto-type the final full history when stopping, if in full mode
+            # Paste the final full history when stopping, if in full mode
             if self.paste_mode == "full" and PYAUTOGUI_AVAILABLE:
                 if auto_type_text(full_history):
-                    print("✓ Final full history has been auto-typed")
+                    print("✓ Final full history has been pasted")
         
         self.is_running = False
 
@@ -495,7 +519,7 @@ def main():
     parser.add_argument("--history-length", type=int, default=10,
                       help="Number of recent transcriptions to maintain in history (default: 10)")
     parser.add_argument("--paste-mode", type=str, default="latest", choices=["latest", "full"],
-                      help="What to auto-type: 'latest' (only the most recent transcription) or 'full' (entire history)")
+                      help="What to paste: 'latest' (only the most recent transcription) or 'full' (entire history)")
     
     args = parser.parse_args()
     
