@@ -41,6 +41,16 @@ ENV/
 # External repositories
 whisper_turboapi_temp/
 
+# Temporary audio files
+latest_speech.wav
+transcribed_audio.wav
+*.wav
+!mel_filters.npz
+!**/warmup_audio.wav
+
+# ONNX models
+*.onnx
+
 # Claude-specific files
 CLAUDE.md
 .claude/
