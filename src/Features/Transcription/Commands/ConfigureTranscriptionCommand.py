@@ -19,12 +19,13 @@ class ConfigureTranscriptionCommand(Command):
     transcription system, such as engine type, model, and parameters.
     
     Args:
-        engine_type: Type of transcription engine to use
-        model_name: Name of the model to use (e.g., 'whisper-large-v3-turbo')
+        engine_type: Type of transcription engine to use ('mlx_whisper' or 'openai')
+        model_name: Name of the model to use (e.g., 'whisper-large-v3-turbo' or 'gpt-4o-transcribe')
         language: Optional language code (e.g., 'en', 'fr') or None for auto-detection
         beam_size: Beam search size for inference (1 for greedy)
         compute_type: Compute precision ('default', 'float16', or 'float32')
         streaming: Whether to enable streaming mode
+        openai_api_key: OpenAI API key (required for 'openai' engine type)
         options: Additional engine-specific parameters
     """
     
@@ -37,6 +38,7 @@ class ConfigureTranscriptionCommand(Command):
                 streaming: bool = True,
                 chunk_duration_ms: int = 1000,
                 chunk_overlap_ms: int = 200,
+                openai_api_key: Optional[str] = None,
                 options: Optional[Dict[str, Any]] = None,
                 id: Optional[str] = None,
                 timestamp: Optional[datetime] = None,
@@ -53,6 +55,7 @@ class ConfigureTranscriptionCommand(Command):
             streaming: Streaming mode flag
             chunk_duration_ms: Chunk duration in ms
             chunk_overlap_ms: Chunk overlap in ms
+            openai_api_key: Optional OpenAI API key (for 'openai' engine)
             options: Additional options
             id: Optional command ID
             timestamp: Optional command timestamp
@@ -70,4 +73,5 @@ class ConfigureTranscriptionCommand(Command):
         self.streaming = streaming
         self.chunk_duration_ms = chunk_duration_ms
         self.chunk_overlap_ms = chunk_overlap_ms
+        self.openai_api_key = openai_api_key
         self.options = options or {}
