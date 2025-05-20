@@ -257,21 +257,21 @@ class OpenAITranscriptionEngine(ITranscriptionEngine):
         Handle standard transcription via REST API.
         
         Args:
-            audio_data: Audio data to transcribe
+            audio_data: Audio data to transcribe or path to audio file
             
         Returns:
             str: Transcribed text
         """
         import tempfile
+        import os
         
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_file:
-            # Write the audio data to a temporary file
-            sf.write(temp_file.name, audio_data, self.sample_rate, format='WAV', subtype='PCM_16')
-            temp_file.flush()
-            
-            # Open the file for sending to the API
-            with open(temp_file.name, "rb") as audio_file:
-                try:
+        try:
+            # If audio_data is a file path, use it directly
+            if isinstance(audio_data, str):
+                self.logger.info(f"Using existing audio file: {audio_data}")
+                
+                # Open the file for sending to the API
+                with open(audio_data, "rb") as audio_file:
                     # Make the API call
                     response = self._client.audio.transcriptions.create(
                         model=self.model_name,
@@ -285,10 +285,33 @@ class OpenAITranscriptionEngine(ITranscriptionEngine):
                         return response.text
                     else:
                         return str(response)
+            
+            # Otherwise, it's numpy array data that needs to be written to a file
+            else:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_file:
+                    # Write the audio data to a temporary file
+                    sf.write(temp_file.name, audio_data, self.sample_rate, format='WAV', subtype='PCM_16')
+                    temp_file.flush()
+                    
+                    # Open the file for sending to the API
+                    with open(temp_file.name, "rb") as audio_file:
+                        # Make the API call
+                        response = self._client.audio.transcriptions.create(
+                            model=self.model_name,
+                            file=audio_file,
+                            response_format="text",
+                            language=self.language
+                        )
                         
-                except Exception as e:
-                    self.logger.error(f"API call failed: {e}")
-                    raise
+                        # Handle the response
+                        if hasattr(response, 'text'):
+                            return response.text
+                        else:
+                            return str(response)
+                
+        except Exception as e:
+            self.logger.error(f"API call failed: {e}")
+            raise
     
     def _handle_websocket_streaming(self, audio_data):
         """
@@ -309,30 +332,40 @@ class OpenAITranscriptionEngine(ITranscriptionEngine):
         Prepare audio for the OpenAI API.
         
         Args:
-            audio_data: Raw audio data (numpy array)
+            audio_data: Raw audio data (numpy array) or file path (str)
             
         Returns:
-            np.ndarray: Properly formatted audio data
+            np.ndarray or str: Properly formatted audio data or file path
         """
-        # Convert sample rate if needed
-        if hasattr(audio_data, 'shape') and self.sample_rate != 16000:
-            import librosa
-            audio_data = librosa.resample(
-                audio_data,
-                orig_sr=self.sample_rate,
-                target_sr=16000
-            )
+        # If audio_data is a string (file path), return it as is
+        if isinstance(audio_data, str):
+            self.logger.info(f"Using file path directly: {audio_data}")
+            return audio_data
+            
+        # Handle numpy arrays
+        if isinstance(audio_data, np.ndarray):
+            # Convert sample rate if needed
+            if self.sample_rate != 16000:
+                import librosa
+                audio_data = librosa.resample(
+                    audio_data,
+                    orig_sr=self.sample_rate,
+                    target_sr=16000
+                )
+            
+            # Ensure proper format and normalization
+            if audio_data.dtype != np.float32:
+                audio_data = audio_data.astype(np.float32)
+                
+            # Normalize to [-1, 1] range if needed
+            max_val = np.max(np.abs(audio_data))
+            if max_val > 0 and max_val > 1.0:
+                audio_data = audio_data / max_val
+                
+            return audio_data
         
-        # Ensure proper format and normalization
-        if audio_data.dtype != np.float32:
-            audio_data = audio_data.astype(np.float32)
-            
-        # Normalize to [-1, 1] range if needed
-        max_val = np.max(np.abs(audio_data))
-        if max_val > 0 and max_val > 1.0:
-            audio_data = audio_data / max_val
-            
-        return audio_data
+        # Handle unsupported types
+        raise TypeError(f"Unsupported audio data type: {type(audio_data).__name__}")
     
     def _handle_empty_result(self, is_final):
         """
