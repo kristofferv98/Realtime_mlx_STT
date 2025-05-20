@@ -932,6 +932,7 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
             audio: Audio data to transcribe
             is_final: Whether this is the final chunk of audio
         """
+        import time  # Import time module for timing the processing
         try:
             # Check for empty or invalid audio input
             if isinstance(audio, np.ndarray) and (audio.size == 0 or np.all(audio == 0)):
@@ -952,7 +953,8 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                     self.result_queue.put(empty_result)
                 return
                 
-            start_time = time.time()
+            import time as process_time  # Make sure we have a clean reference
+            start_time = process_time.time()
             
             # ENHANCED DEBUG: Log detailed information about the audio
             if isinstance(audio, str):
@@ -994,7 +996,7 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                     os.makedirs(debug_dir, exist_ok=True)
                     
                     # Use timestamp in filename to avoid overwriting previous files and conflicts
-                    timestamp = int(time.time())
+                    timestamp = int(process_time.time())
                     debug_path = os.path.join(debug_dir, f"engine_{timestamp}.wav")
                     sf.write(debug_path, audio, self.sample_rate)
                     self.logger.info(f"DEBUGGING: Saved audio chunk to: {debug_path}")
@@ -1012,7 +1014,7 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
             )
             
             # Calculate processing time
-            processing_time = time.time() - start_time
+            processing_time = process_time.time() - start_time
             
             # Format result
             transcription_result = {
