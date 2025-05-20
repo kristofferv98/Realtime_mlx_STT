@@ -79,15 +79,15 @@ def main():
         access_key=access_key
     )
     
-    # Don't connect VAD directly to transcription - WakeWordModule will handle speech detection
-    # The TranscriptionModule should only receive speech events after wake word detection
-    # This would cause all speech to be transcribed regardless of wake word:
-    # 
+    # DO NOT connect VAD directly to transcription
+    # Comment this out completely to prevent VAD from automatically triggering
+    # transcription without wake word detection
+    #
     # TranscriptionModule.register_vad_integration(
     #     event_bus=event_bus,
     #     transcription_handler=transcription_module,
     #     session_id=None,
-    #     auto_start_on_speech=True
+    #     auto_start_on_speech=False 
     # )
     
     # Set up event handlers
@@ -98,8 +98,13 @@ def main():
     
     def on_wake_word_timeout(wake_word, timeout_duration):
         """Handle wake word timeout events."""
+        nonlocal is_wake_word_active
+        
         print(f"\n⏱️ Timed out after {timeout_duration:.1f}s without speech")
         print(f"Listening for wake word '{args.wake_words}'...")
+        
+        # Reset wake word active flag
+        is_wake_word_active = False
     
     def on_transcription_update(session_id, text, is_final, confidence):
         """Handle transcription update events."""
@@ -110,10 +115,64 @@ def main():
             # Print intermediate results on same line
             print(f"\r🎤 {text}", end="", flush=True)
     
+    # Variables to track state
+    is_wake_word_active = False
+    active_session_id = None
+    
+    # Subscribe to VAD events directly to handle transcription only after wake word
+    def on_speech_detected(confidence, timestamp, speech_id):
+        """Handle speech detected events, but only process after wake word."""
+        nonlocal is_wake_word_active, active_session_id
+        
+        if is_wake_word_active:
+            print(f"Speech detected after wake word!")
+            
+            # Create a session ID for this speech segment
+            active_session_id = f"wake-{speech_id}"
+            
+            # Start a new transcription session
+            TranscriptionModule.start_session(
+                command_dispatcher, 
+                session_id=active_session_id
+            )
+    
+    def on_silence_detected(speech_duration, start_time, end_time, speech_id):
+        """Handle silence detected events, but only process after wake word."""
+        nonlocal is_wake_word_active, active_session_id
+        
+        if is_wake_word_active and active_session_id:
+            print(f"Processing speech after wake word (duration: {speech_duration:.2f}s)")
+            
+            # Stop the current transcription session
+            TranscriptionModule.stop_session(
+                command_dispatcher,
+                session_id=active_session_id,
+                flush_remaining_audio=True
+            )
+            
+            # Reset state
+            is_wake_word_active = False
+            active_session_id = None
+            
+            print(f"Listening for wake word '{args.wake_words}'...")
+    
+    # Enhanced wake word detection handler
+    def on_wake_word_detected(wake_word, confidence, timestamp):
+        """Handle wake word detection events."""
+        nonlocal is_wake_word_active
+        
+        print(f"\n🔊 Wake word detected: '{wake_word}' (confidence: {confidence:.2f})")
+        print("Listening for speech... (speak now)")
+        
+        # Set wake word active flag
+        is_wake_word_active = True
+    
     # Subscribe to events
     WakeWordModule.on_wake_word_detected(event_bus, on_wake_word_detected)
     WakeWordModule.on_wake_word_timeout(event_bus, on_wake_word_timeout)
     TranscriptionModule.on_transcription_updated(event_bus, on_transcription_update)
+    VadModule.on_speech_detected(event_bus, on_speech_detected)
+    VadModule.on_silence_detected(event_bus, on_silence_detected)
     
     # Start audio capture
     print("Starting audio capture...")
