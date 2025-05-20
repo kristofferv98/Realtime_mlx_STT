@@ -38,8 +38,9 @@ from src.Features.Transcription.Models.TranscriptionSession import Transcription
 from src.Features.Transcription.Models.TranscriptionConfig import TranscriptionConfig
 from src.Features.Transcription.Models.TranscriptionResult import TranscriptionResult
 
-# Updated import for the Direct Transcription Manager
+# Import for Transcription Manager and engines
 from src.Features.Transcription.Engines.DirectTranscriptionManager import DirectTranscriptionManager
+from src.Features.Transcription.Engines.OpenAITranscriptionEngine import OpenAITranscriptionEngine
 
 
 class TranscriptionCommandHandler(ICommandHandler[Any]):
@@ -220,32 +221,37 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
         self.logger.info(f"Handling ConfigureTranscriptionCommand, engine_type={command.engine_type}")
         
         try:
+            # Create config dict from command parameters
+            config_dict = {
+                'engine_type': command.engine_type,
+                'model_name': command.model_name,
+                'language': command.language,
+                'compute_type': command.compute_type,
+                'beam_size': command.beam_size,
+                'streaming': command.streaming,
+                'chunk_duration_ms': command.chunk_duration_ms,
+                'chunk_overlap_ms': command.chunk_overlap_ms
+            }
+            
+            # Add OpenAI API key if provided
+            if hasattr(command, 'openai_api_key') and command.openai_api_key:
+                config_dict['openai_api_key'] = command.openai_api_key
+            
+            # Add any additional options
+            config_dict.update(command.options)
+            
             # Update default config
-            self.default_config = TranscriptionConfig(
-                engine_type=command.engine_type,
-                model_name=command.model_name,
-                language=command.language,
-                compute_type=command.compute_type,
-                beam_size=command.beam_size,
-                streaming=command.streaming,
-                chunk_duration_ms=command.chunk_duration_ms,
-                chunk_overlap_ms=command.chunk_overlap_ms,
-                options=command.options
-            )
+            self.default_config = TranscriptionConfig(**config_dict)
+            
+            # If engine type is being changed and the manager is running, stop it
+            # so that we can restart with the correct engine type
+            if self.transcription_manager.is_running() and self.transcription_manager.engine_type != command.engine_type:
+                self.logger.info(f"Engine type changing from {self.transcription_manager.engine_type} to {command.engine_type}, restarting manager")
+                self.transcription_manager.stop()
             
             # If manager is running, configure it
             if self.transcription_manager.is_running():
-                return self.transcription_manager.configure({
-                    'engine_type': command.engine_type,
-                    'model_name': command.model_name,
-                    'language': command.language,
-                    'compute_type': command.compute_type,
-                    'beam_size': command.beam_size,
-                    'streaming': command.streaming,
-                    'chunk_duration_ms': command.chunk_duration_ms,
-                    'chunk_overlap_ms': command.chunk_overlap_ms,
-                    **command.options
-                })
+                return self.transcription_manager.configure(config_dict)
             
             # If not running, we'll use these settings when it starts
             return True

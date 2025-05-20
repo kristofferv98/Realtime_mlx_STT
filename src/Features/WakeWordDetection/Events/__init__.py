@@ -1,0 +1,4 @@
+from src.Features.WakeWordDetection.Events.WakeWordDetectedEvent import WakeWordDetectedEvent
+from src.Features.WakeWordDetection.Events.WakeWordDetectionStartedEvent import WakeWordDetectionStartedEvent
+from src.Features.WakeWordDetection.Events.WakeWordDetectionStoppedEvent import WakeWordDetectionStoppedEvent
+from src.Features.WakeWordDetection.Events.WakeWordTimeoutEvent import WakeWordTimeoutEvent

@@ -79,13 +79,16 @@ def main():
         access_key=access_key
     )
     
-    # Connect the VAD system to the transcription system
-    TranscriptionModule.register_vad_integration(
-        event_bus=event_bus,
-        transcription_handler=transcription_module,
-        session_id=None,  # Generate unique session for each speech segment
-        auto_start_on_speech=True
-    )
+    # Don't connect VAD directly to transcription - WakeWordModule will handle speech detection
+    # The TranscriptionModule should only receive speech events after wake word detection
+    # This would cause all speech to be transcribed regardless of wake word:
+    # 
+    # TranscriptionModule.register_vad_integration(
+    #     event_bus=event_bus,
+    #     transcription_handler=transcription_module,
+    #     session_id=None,
+    #     auto_start_on_speech=True
+    # )
     
     # Set up event handlers
     def on_wake_word_detected(wake_word, confidence, timestamp):

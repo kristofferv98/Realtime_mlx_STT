@@ -1,0 +1,1 @@
+from src.Features.WakeWordDetection.Models.WakeWordConfig import WakeWordConfig

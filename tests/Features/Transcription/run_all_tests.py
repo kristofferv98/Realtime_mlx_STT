@@ -75,6 +75,35 @@ def run_direct_engine_test():
     return success
 
 
+def run_openai_engine_test():
+    """Run the OpenAI transcription engine test."""
+    print(f"Running OpenAI transcription engine test...")
+    
+    cmd = [
+        sys.executable,
+        "-m",
+        "tests.Features.Transcription.openai_transcription_engine_test"
+    ]
+    
+    start_time = time.time()
+    process = subprocess.run(cmd, capture_output=True)
+    duration = time.time() - start_time
+    
+    success = process.returncode == 0
+    status = "✓ PASSED" if success else "✗ FAILED"
+    
+    print(f"  OpenAI transcription engine test: {status} (took {duration:.2f}s)")
+    
+    if not success:
+        print("\nTest output:")
+        print(process.stdout.decode('utf-8'))
+        print(process.stderr.decode('utf-8'))
+    
+    print()
+    
+    return success
+
+
 def run_real_transcription_test(run_real_tests=False):
     """Run the real-world transcription test (only if explicitly requested)."""
     if not run_real_tests:
@@ -146,6 +175,10 @@ def main():
     # Run direct engine test
     direct_engine_success = run_direct_engine_test()
     all_passed = all_passed and direct_engine_success
+    
+    # Run OpenAI engine test
+    openai_engine_success = run_openai_engine_test()
+    all_passed = all_passed and openai_engine_success
     
     # Run real transcription test (only if requested)
     real_success = run_real_transcription_test(args.run_real_tests)

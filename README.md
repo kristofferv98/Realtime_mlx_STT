@@ -7,6 +7,7 @@ Realtime_mlx_STT is a high-performance speech-to-text transcription library opti
 - **Real-time transcription** with low latency for macOS applications
 - **Apple Silicon optimization** using MLX with Neural Engine acceleration
 - **Voice activity detection** using both WebRTC and Silero models
+- **Wake word detection** for hands-free activation using Porcupine
 - **Vertical slice architecture** for modular and maintainable code
 - **Event-driven design** for flexible integration
 - **Thread-safe operations** for responsive applications
@@ -18,6 +19,7 @@ Realtime_mlx_STT is a high-performance speech-to-text transcription library opti
 - **MLX** for Apple Silicon optimization
 - **PyAudio** for audio capture
 - **WebRTC VAD** and **Silero VAD** for voice activity detection
+- **Porcupine** for wake word detection (optional)
 - **Torch** and **NumPy** for audio processing
 
 > **Important Note**: This library is specifically optimized for Apple Silicon and will not work on Intel-based Macs or other platforms. It requires the Neural Engine found in Apple Silicon chips to achieve optimal performance.
@@ -38,6 +40,9 @@ uv pip install -e .
 
 # For development, include dev dependencies
 uv pip install -e ".[dev]"
+
+# For wake word detection
+uv pip install -e ".[wakeword]"
 ```
 
 ## Architecture
@@ -61,6 +66,7 @@ src/
 
 - **Audio Capture**: Handles microphone input and audio file processing
 - **Voice Activity Detection**: Detects speech using WebRTC, Silero, or combined approaches
+- **Wake Word Detection**: Recognizes specific trigger phrases to activate the system
 - **Transcription**: Processes audio using MLX-optimized Whisper models
 - **Event System**: Enables loose coupling between components
 
@@ -119,7 +125,22 @@ The repository includes several ready-to-use example scripts:
    python examples/continuous_transcription_pasting.py --paste-mode full
    ```
 
-3. **OpenAI Transcription** - Transcribes speech using OpenAI's cloud-based GPT-4o-transcribe model:
+3. **Wake Word Activation** - Transcribes speech only after detecting a wake word:
+   ```bash
+   # Install required dependencies
+   uv pip install -e ".[wakeword]"
+   
+   # Set your Porcupine access key (get from https://console.picovoice.ai/)
+   export PORCUPINE_ACCESS_KEY=your_key_here
+   
+   # Run with default "porcupine" wake word
+   python examples/wake_word_detection.py
+   
+   # Run with custom wake words
+   python examples/wake_word_detection.py --wake-words "jarvis,computer" --sensitivity 0.7
+   ```
+
+4. **OpenAI Transcription** - Transcribes speech using OpenAI's cloud-based GPT-4o-transcribe model:
    ```bash
    # Install required dependencies
    uv pip install -e ".[openai]"
@@ -134,12 +155,12 @@ The repository includes several ready-to-use example scripts:
    python examples/openai_transcription.py --model gpt-4o-mini-transcribe
    ```
 
-4. **File Transcription** - Transcribes audio from a file:
+5. **File Transcription** - Transcribes audio from a file:
    ```bash
    python examples/transcribe_file.py path/to/audio/file.mp3
    ```
 
-5. **Check Audio Devices** - Lists all available audio input devices:
+6. **Check Audio Devices** - Lists all available audio input devices:
    ```bash
    python examples/check_audio_devices.py
    ```
@@ -187,4 +208,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [OpenAI Whisper](https://github.com/openai/whisper) for the base Whisper large-v3-turbo model
 - [MLX](https://github.com/ml-explore/mlx) for Apple Silicon optimization
 - [RealtimeSTT](https://github.com/KoljaB/RealtimeSTT) for the original audio processing concepts
+- [Picovoice Porcupine](https://picovoice.ai/platform/porcupine/) for wake word detection
 - [Hugging Face](https://huggingface.co) for model distribution infrastructure
