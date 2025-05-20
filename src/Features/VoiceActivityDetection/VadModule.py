@@ -29,8 +29,8 @@ class VadModule:
     @staticmethod
     def register(command_dispatcher: CommandDispatcher,
                 event_bus: IEventBus,
-                default_detector: str = "webrtc",
-                default_sensitivity: float = 0.5) -> VoiceActivityHandler:
+                default_detector: str = "combined",  # Changed from "webrtc" to "combined" to use the two-stage approach
+                default_sensitivity: float = 0.7) -> VoiceActivityHandler:  # Increased from 0.5 for more conservative detection
         """
         Register the VoiceActivityDetection feature with the system.
         
@@ -103,8 +103,8 @@ class VadModule:
     
     @staticmethod
     def configure_vad(command_dispatcher: CommandDispatcher,
-                     detector_type: str = "webrtc",
-                     sensitivity: float = 0.5,
+                     detector_type: str = "combined",  # Changed from "webrtc" to "combined" for two-stage detection
+                     sensitivity: float = 0.7,  # Increased from 0.5 for more conservative detection
                      window_size: int = 5,
                      min_speech_duration: float = 0.25,
                      **kwargs) -> bool:
@@ -115,9 +115,12 @@ class VadModule:
             command_dispatcher: The command dispatcher to use
             detector_type: Type of VAD detector to use
             sensitivity: Sensitivity level (0.0-1.0)
+                For 'combined' detector, this affects the Silero threshold
+                while WebRTC threshold is set internally (current default: 0.8)
             window_size: Number of frames to consider
             min_speech_duration: Minimum speech segment duration in seconds
             **kwargs: Additional detector-specific parameters
+                For direct control, use webrtc_threshold and silero_threshold
             
         Returns:
             bool: True if configuration was successful

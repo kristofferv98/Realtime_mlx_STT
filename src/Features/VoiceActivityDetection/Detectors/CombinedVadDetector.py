@@ -43,13 +43,13 @@ class CombinedVadDetector(IVoiceActivityDetector):
     
     def __init__(self, 
                  webrtc_aggressiveness: int = 2,
-                 silero_threshold: float = 0.4,  # Reduced from 0.5 for earlier detection
+                 silero_threshold: float = 0.6,  # Increased from 0.4 for more conservative detection
                  sample_rate: int = 16000,
                  frame_duration_ms: int = 30,
                  speech_confirmation_frames: int = 2,  # Reduced from 3 for faster detection
                  silence_confirmation_frames: int = 30,  # Increased to 30 to allow for longer pauses in extended speech
                  speech_buffer_size: int = 100,  # Increased to 100 for better tracking of long speech segments
-                 webrtc_threshold: float = 0.6,
+                 webrtc_threshold: float = 0.8,  # Increased from 0.6 for more conservative detection
                  use_silero_confirmation: bool = True):
         """
         Initialize the Combined VAD detector.
@@ -66,6 +66,8 @@ class CombinedVadDetector(IVoiceActivityDetector):
             use_silero_confirmation: Whether to use Silero for confirmation
         """
         self.logger = logging.getLogger(__name__)
+        # Set log level to INFO for proper visibility of threshold crossings
+        self.logger.setLevel(logging.INFO)
         
         # Core parameters
         self.sample_rate = sample_rate
@@ -187,6 +189,7 @@ class CombinedVadDetector(IVoiceActivityDetector):
                     self.consecutive_speech_frames = 1
                     self.speech_start_time = current_time
                     self._log_state_transition("SILENCE", "POTENTIAL_SPEECH")
+                    self.logger.info(f"WebRTC detected initial speech with confidence {webrtc_confidence:.2f}")
                     return False, webrtc_confidence
                 else:
                     # Stay in silence
@@ -210,10 +213,12 @@ class CombinedVadDetector(IVoiceActivityDetector):
                                 self.consecutive_silence_frames = 0
                                 self.stats['speech_segments'] += 1
                                 self._log_state_transition("POTENTIAL_SPEECH", "SPEECH")
+                                self.logger.info(f"Speech confirmed by both WebRTC ({webrtc_confidence:.2f}) and Silero ({silero_confidence:.2f})")
                                 return True, max(webrtc_confidence, silero_confidence)
                             else:
                                 # Silero rejects: stay in potential speech
                                 self.stats['silero_rejections'] += 1
+                                self.logger.info(f"WebRTC detected speech ({webrtc_confidence:.2f}) but Silero rejected ({silero_confidence:.2f})")
                                 return False, (webrtc_confidence + silero_confidence) / 2
                         else:
                             # No Silero confirmation required
