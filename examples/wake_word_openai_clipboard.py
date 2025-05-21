@@ -87,6 +87,13 @@ import time
 import subprocess
 from typing import Optional, List
 
+# Try to import pyautogui (needed for auto-paste functionality)
+try:
+    import pyautogui
+    PYAUTOGUI_AVAILABLE = True
+except ImportError:
+    PYAUTOGUI_AVAILABLE = False
+
 from src.Core.Events.event_bus import EventBus
 from src.Core.Commands.command_dispatcher import CommandDispatcher
 from src.Features.AudioCapture.AudioCaptureModule import AudioCaptureModule
@@ -95,15 +102,34 @@ from src.Features.WakeWordDetection.WakeWordModule import WakeWordModule
 from src.Features.Transcription.TranscriptionModule import TranscriptionModule
 
 
-def copy_to_clipboard(text):
-    """Copy text to clipboard using pbcopy (macOS)."""
+def copy_to_clipboard(text, auto_paste=True):
+    """
+    Copy text to clipboard using pbcopy (macOS) and optionally auto-paste.
+    
+    Args:
+        text: Text to copy to clipboard
+        auto_paste: Whether to automatically paste after copying (simulates Cmd+V)
+    
+    Returns:
+        tuple: (copy_success, paste_success) indicating success of each operation
+    """
     try:
+        # Copy to clipboard
         process = subprocess.Popen('pbcopy', env={'LANG': 'en_US.UTF-8'}, stdin=subprocess.PIPE)
         process.communicate(text.encode('utf-8'))
-        return True
+        
+        # Auto-paste if enabled and pyautogui is available
+        if auto_paste and PYAUTOGUI_AVAILABLE:
+            # Brief pause to ensure text is in clipboard
+            time.sleep(0.1)
+            # Simulate Command+V keystroke
+            pyautogui.hotkey('command', 'v')
+            return True, True  # Both copy and paste successful
+        
+        return True, False  # Copy successful, paste not attempted
     except Exception as e:
-        print(f"Error copying to clipboard: {e}")
-        return False
+        print(f"Error with clipboard operation: {e}")
+        return False, False  # Operation failed
 
 
 def main():
@@ -132,6 +158,8 @@ def main():
                         help="OpenAI model to use for transcription (default: gpt-4o-transcribe)")
     parser.add_argument("--no-clipboard", action="store_true", 
                         help="Disable automatic clipboard copying")
+    parser.add_argument("--no-auto-paste", action="store_true",
+                        help="Disable automatic pasting (copy only)")
     
     args = parser.parse_args()
     
@@ -139,6 +167,13 @@ def main():
     if not sys.platform.startswith('darwin') and not args.no_clipboard:
         print("Warning: Clipboard functionality is designed for macOS. It may not work on other platforms.")
         print("Use --no-clipboard to disable this feature on non-macOS systems.")
+    
+    # Check if PyAutoGUI is available for auto-paste functionality
+    if not PYAUTOGUI_AVAILABLE and not args.no_auto_paste and not args.no_clipboard:
+        print("Warning: Auto-paste functionality requires PyAutoGUI to be installed.")
+        print("Install it with: uv pip install pyautogui")
+        print("Auto-paste will be disabled. Use --no-auto-paste to suppress this warning.")
+        args.no_auto_paste = True  # Disable auto-paste if PyAutoGUI is not available
     
     # Get wake words from command line (comma-separated)
     wake_words = [word.strip() for word in args.wake_words.split(",")]
@@ -272,9 +307,14 @@ def main():
                             
                             # Copy to clipboard if feature is enabled
                             if not args.no_clipboard and text.strip():
-                                if copy_to_clipboard(text):
-                                    print(f"📋 Copied to clipboard: \"{text}\"")
-                                    logger.info(f"Copied transcription to clipboard")
+                                copy_success, paste_success = copy_to_clipboard(text, auto_paste=not args.no_auto_paste)
+                                if copy_success:
+                                    if paste_success:
+                                        print(f"📋 Copied to clipboard and pasted: \"{text}\"")
+                                        logger.info(f"Copied transcription to clipboard and auto-pasted")
+                                    else:
+                                        print(f"📋 Copied to clipboard: \"{text}\"")
+                                        logger.info(f"Copied transcription to clipboard")
                             
                             print(f"\nListening for wake word '{args.wake_words}'...")
                     elif isinstance(result, dict):
@@ -293,9 +333,14 @@ def main():
                                 
                                 # Copy to clipboard if feature is enabled
                                 if not args.no_clipboard and text.strip():
-                                    if copy_to_clipboard(text):
-                                        print(f"📋 Copied to clipboard: \"{text}\"")
-                                        logger.info(f"Copied transcription to clipboard")
+                                    copy_success, paste_success = copy_to_clipboard(text, auto_paste=not args.no_auto_paste)
+                                    if copy_success:
+                                        if paste_success:
+                                            print(f"📋 Copied to clipboard and pasted: \"{text}\"")
+                                            logger.info(f"Copied transcription to clipboard and auto-pasted")
+                                        else:
+                                            print(f"📋 Copied to clipboard: \"{text}\"")
+                                            logger.info(f"Copied transcription to clipboard")
                                 
                                 print(f"\nListening for wake word '{args.wake_words}'...")
                         elif "error" in result:
@@ -466,6 +511,7 @@ def main():
     logger.info("System is in low-power mode until wake word is detected")
     logger.info(f"Using OpenAI '{args.model}' for transcription")
     logger.info(f"Clipboard copying is {'enabled' if not args.no_clipboard else 'disabled'}")
+    logger.info(f"Auto-paste after copying is {'enabled' if not args.no_clipboard and not args.no_auto_paste else 'disabled'}")
     
     # Print user-friendly messages with emojis
     print(f"👂 Wake word detection active (only wake word processing)")
@@ -473,6 +519,8 @@ def main():
     print(f"💤 System is in low-power mode until wake word is detected")
     print(f"🤖 Using OpenAI '{args.model}' for transcription")
     print(f"📋 Clipboard copying is {'enabled' if not args.no_clipboard else 'disabled'}")
+    if not args.no_clipboard:
+        print(f"⌨️ Auto-paste after copying is {'enabled' if not args.no_auto_paste else 'disabled'}")
     print(f"Say '{args.wake_words}' to activate")
     
     # Keep main thread alive
