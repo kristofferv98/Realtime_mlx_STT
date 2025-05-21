@@ -5,7 +5,6 @@ This module provides an implementation of voice activity detection using the
 WebRTC VAD algorithm, which is fast and lightweight.
 """
 
-import logging
 import struct
 from typing import Dict, Any, Optional, Tuple, List
 
@@ -13,6 +12,7 @@ import numpy as np
 import webrtcvad
 
 from src.Core.Common.Interfaces.voice_activity_detector import IVoiceActivityDetector
+from src.Infrastructure.Logging import LoggingModule
 
 
 class WebRtcVadDetector(IVoiceActivityDetector):
@@ -43,7 +43,7 @@ class WebRtcVadDetector(IVoiceActivityDetector):
             history_size: Number of frames to keep in history for smoothing
             speech_threshold: Fraction of frames needed to classify as speech
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         
         # Validate sample rate
         valid_sample_rates = [8000, 16000, 32000, 48000]

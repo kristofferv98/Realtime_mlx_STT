@@ -16,6 +16,9 @@ from src.Core.Commands.command import Command
 from src.Core.Events.event_bus import IEventBus
 from src.Core.Common.Interfaces.voice_activity_detector import IVoiceActivityDetector
 
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
+
 # Cross-feature dependencies
 from src.Features.AudioCapture.Events.AudioChunkCapturedEvent import AudioChunkCapturedEvent
 from src.Features.AudioCapture.Models.AudioChunk import AudioChunk
@@ -48,7 +51,7 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         Args:
             event_bus: Event bus for publishing and subscribing to events
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.event_bus = event_bus
         
         # Initialize detector registry
@@ -186,6 +189,14 @@ class VoiceActivityHandler(ICommandHandler[Any]):
             bool: True if configuration was successful
         """
         self.logger.info(f"Handling ConfigureVadCommand for detector_type={command.detector_type}")
+        
+        # Check for warning conditions - moved from the command model to the handler
+        if command.pre_speech_buffer_size < 16:
+            self.logger.warning(
+                f"Pre-speech buffer size is very small ({command.pre_speech_buffer_size}). "
+                f"This may not capture enough audio before speech detection. "
+                f"Recommended minimum size is 16 chunks (~0.5 seconds)."
+            )
         
         # Update active detector
         self.active_detector_name = command.detector_type

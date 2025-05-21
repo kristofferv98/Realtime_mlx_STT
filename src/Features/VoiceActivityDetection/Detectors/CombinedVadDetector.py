@@ -6,12 +6,14 @@ employing a two-stage system: fast detection with WebRTC VAD followed by
 more accurate verification with Silero VAD.
 """
 
-import logging
 import time
 from enum import Enum
 from typing import Dict, Any, Optional, Tuple, List, Union, TYPE_CHECKING
 
 import numpy as np
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 if TYPE_CHECKING:
     from src.Core.Common.Interfaces.voice_activity_detector import IVoiceActivityDetector
@@ -65,9 +67,8 @@ class CombinedVadDetector(IVoiceActivityDetector):
             webrtc_threshold: Threshold for speech in WebRTC history buffer
             use_silero_confirmation: Whether to use Silero for confirmation
         """
-        self.logger = logging.getLogger(__name__)
-        # Set log level to INFO for proper visibility of threshold crossings
-        self.logger.setLevel(logging.INFO)
+        self.logger = LoggingModule.get_logger(__name__)
+        # Removed direct log level setting - now controlled by LoggingModule configuration
         
         # Core parameters
         self.sample_rate = sample_rate

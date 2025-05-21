@@ -63,14 +63,7 @@ class ConfigureVadCommand(Command):
             
         if self.pre_speech_buffer_size < 1:
             raise ValueError(f"Pre-speech buffer size must be at least 1, got {self.pre_speech_buffer_size}")
-        elif self.pre_speech_buffer_size < 16:
-            # Warning for small buffer sizes, but still allow them
-            import logging
-            logging.getLogger(__name__).warning(
-                f"Pre-speech buffer size is very small ({self.pre_speech_buffer_size}). "
-                f"This may not capture enough audio before speech detection. "
-                f"Recommended minimum size is 16 chunks (~0.5 seconds)."
-            )
+        # Remove direct logging from model class - will be handled in the command handler
         
     def map_to_detector_config(self) -> Dict[str, Any]:
         """

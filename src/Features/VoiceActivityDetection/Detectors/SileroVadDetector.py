@@ -5,7 +5,6 @@ This module provides an implementation of voice activity detection using the
 Silero VAD model, which offers higher accuracy compared to rule-based approaches.
 """
 
-import logging
 import os
 import struct
 import shutil 
@@ -16,6 +15,7 @@ import numpy as np
 import torch
 
 from src.Core.Common.Interfaces.voice_activity_detector import IVoiceActivityDetector
+from src.Infrastructure.Logging import LoggingModule
 
 
 class SileroVadDetector(IVoiceActivityDetector):
@@ -52,7 +52,7 @@ class SileroVadDetector(IVoiceActivityDetector):
             min_silence_duration_ms: Minimum silence segment duration in ms
             use_onnx: Whether to use ONNX model (faster) instead of PyTorch
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         
         # Validate sample rate
         valid_sample_rates = [8000, 16000]
