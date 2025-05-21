@@ -5,11 +5,13 @@ This module provides an implementation of the IWakeWordDetector interface
 using the Picovoice Porcupine wake word detection engine.
 """
 
-import logging
 import os
 from typing import List, Optional, Tuple, Dict, Any
 
 import numpy as np
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 try:
     import pvporcupine
@@ -41,7 +43,7 @@ class PorcupineWakeWordDetector(IWakeWordDetector):
             keyword_paths: List of paths to custom keyword model files (.ppn)
             sensitivities: List of sensitivities for each wake word
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.porcupine = None
         self.access_key = access_key
         self.keywords = keywords or ["porcupine"]

@@ -5,11 +5,13 @@ This handler implements the ICommandHandler interface to process wake word-relat
 like detecting wake words and configuring wake word detection parameters.
 """
 
-import logging
 import time
 from typing import Any, Dict, List, Optional, Union, Type, cast, Deque
 from collections import deque
 from enum import Enum, auto
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 # Core imports
 from src.Core.Common.Interfaces.command_handler import ICommandHandler
@@ -66,7 +68,7 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
             event_bus: Event bus for publishing and subscribing to events
             command_dispatcher: Command dispatcher for sending commands
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.event_bus = event_bus
         self.command_dispatcher = command_dispatcher
         

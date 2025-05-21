@@ -5,9 +5,11 @@ This module serves as the main entry point for the WakeWordDetection feature,
 handling registration of commands, events, and the wake word handler.
 """
 
-import logging
 import os
 from typing import Dict, Any, Optional, List, Union, Callable
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 from src.Core.Commands.command_dispatcher import CommandDispatcher
 from src.Core.Events.event_bus import IEventBus
@@ -55,7 +57,7 @@ class WakeWordModule:
         Returns:
             WakeWordCommandHandler: The registered command handler
         """
-        logger = logging.getLogger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         logger.info("Registering WakeWordDetection feature")
         
         # Read PORCUPINE_ACCESS_KEY from environment if not provided
