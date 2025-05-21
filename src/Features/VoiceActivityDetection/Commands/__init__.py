@@ -7,10 +7,12 @@ from .DetectVoiceActivityCommand import DetectVoiceActivityCommand
 from .ConfigureVadCommand import ConfigureVadCommand
 from .EnableVadProcessingCommand import EnableVadProcessingCommand
 from .DisableVadProcessingCommand import DisableVadProcessingCommand
+from .ClearVadPreSpeechBufferCommand import ClearVadPreSpeechBufferCommand
 
 __all__ = [
     'DetectVoiceActivityCommand',
     'ConfigureVadCommand',
     'EnableVadProcessingCommand',
-    'DisableVadProcessingCommand'
+    'DisableVadProcessingCommand',
+    'ClearVadPreSpeechBufferCommand'
 ]

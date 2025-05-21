@@ -28,6 +28,7 @@ from src.Features.VoiceActivityDetection.Commands.DetectVoiceActivityCommand imp
 from src.Features.VoiceActivityDetection.Commands.ConfigureVadCommand import ConfigureVadCommand
 from src.Features.VoiceActivityDetection.Commands.EnableVadProcessingCommand import EnableVadProcessingCommand
 from src.Features.VoiceActivityDetection.Commands.DisableVadProcessingCommand import DisableVadProcessingCommand
+from src.Features.VoiceActivityDetection.Commands.ClearVadPreSpeechBufferCommand import ClearVadPreSpeechBufferCommand
 from src.Features.VoiceActivityDetection.Events.SpeechDetectedEvent import SpeechDetectedEvent
 from src.Features.VoiceActivityDetection.Events.SilenceDetectedEvent import SilenceDetectedEvent
 from src.Features.VoiceActivityDetection.Detectors.WebRtcVadDetector import WebRtcVadDetector
@@ -119,6 +120,8 @@ class VoiceActivityHandler(ICommandHandler[Any]):
             return self._handle_enable_vad_processing(command)
         elif isinstance(command, DisableVadProcessingCommand):
             return self._handle_disable_vad_processing(command)
+        elif isinstance(command, ClearVadPreSpeechBufferCommand):
+            return self._handle_clear_vad_pre_speech_buffer(command)
         else:
             raise TypeError(f"Unsupported command type: {type(command).__name__}")
     
@@ -136,7 +139,8 @@ class VoiceActivityHandler(ICommandHandler[Any]):
             DetectVoiceActivityCommand,
             ConfigureVadCommand,
             EnableVadProcessingCommand,
-            DisableVadProcessingCommand
+            DisableVadProcessingCommand,
+            ClearVadPreSpeechBufferCommand
         ))
     
     def _handle_detect_voice_activity(self, command: DetectVoiceActivityCommand) -> Union[bool, Dict[str, Any]]:
@@ -297,6 +301,26 @@ class VoiceActivityHandler(ICommandHandler[Any]):
             self.logger.debug("VAD audio processing already disabled")
             
         return True
+        
+    def _handle_clear_vad_pre_speech_buffer(self, command: ClearVadPreSpeechBufferCommand) -> None:
+        """
+        Handle ClearVadPreSpeechBufferCommand by clearing the pre-speech buffer.
+        
+        This method is typically called after a wake word is detected to ensure
+        that the audio transcribed doesn't include the wake word itself or
+        audio captured before it.
+        
+        Args:
+            command: The ClearVadPreSpeechBufferCommand
+            
+        Returns:
+            None: No specific return value needed for this command type
+        """
+        self.logger.info("Clearing VAD pre-speech buffer on command.")
+        self.pre_speech_buffer.clear()
+        self._pre_speech_durations.clear()
+        self._pre_speech_buffer_duration = 0.0
+        return None
     
     def _on_audio_chunk_captured(self, event: AudioChunkCapturedEvent) -> None:
         """

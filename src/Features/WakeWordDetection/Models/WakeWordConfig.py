@@ -27,6 +27,7 @@ class WakeWordConfig:
     activation_delay: float = 0.0  # Seconds to wait for VAD before switching to wake word mode
     speech_timeout: float = 5.0  # Seconds to wait for speech after wake word detection
     buffer_duration: float = 0.1  # Seconds of audio to buffer before/including wake word
+    exclude_pre_wake_word_audio: bool = True  # If True, VAD pre-buffer is cleared after wake word
     
     # Additional options
     options: Dict[str, Any] = field(default_factory=dict)

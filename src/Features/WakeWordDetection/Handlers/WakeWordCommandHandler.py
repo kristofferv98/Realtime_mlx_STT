@@ -28,6 +28,7 @@ from src.Features.VoiceActivityDetection.Events.SilenceDetectedEvent import Sile
 from src.Features.VoiceActivityDetection.Commands.ConfigureVadCommand import ConfigureVadCommand
 from src.Features.VoiceActivityDetection.Commands.EnableVadProcessingCommand import EnableVadProcessingCommand
 from src.Features.VoiceActivityDetection.Commands.DisableVadProcessingCommand import DisableVadProcessingCommand
+from src.Features.VoiceActivityDetection.Commands.ClearVadPreSpeechBufferCommand import ClearVadPreSpeechBufferCommand
 
 # Feature-specific imports
 from src.Features.WakeWordDetection.Commands.ConfigureWakeWordCommand import ConfigureWakeWordCommand
@@ -466,6 +467,13 @@ class WakeWordCommandHandler(ICommandHandler[Any]):
             audio_reference=self._get_buffered_audio()
         ))
         
+        # If configured, clear VAD's pre-speech buffer to exclude wake word audio
+        if self.config.exclude_pre_wake_word_audio:
+            self.logger.info("Wake word detected, dispatching command to clear VAD pre-speech buffer.")
+            self.command_dispatcher.dispatch(ClearVadPreSpeechBufferCommand())
+        else:
+            self.logger.info("Wake word detected, VAD pre-speech buffer will be retained as per configuration.")
+            
         # Start listening for speech with VAD
         self.command_dispatcher.dispatch(
             ConfigureVadCommand(
