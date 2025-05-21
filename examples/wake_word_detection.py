@@ -51,28 +51,69 @@ if is_quiet_mode:
     # Disable tqdm progress bars
     try:
         # Try to import and monkey patch tqdm before any other imports
-        import tqdm as _tqdm
+        import tqdm as tqdm_module_to_patch  # Keep a reference to the imported module
         
-        # Save original tqdm
-        _original_tqdm = _tqdm.tqdm
-        
-        # Create null implementation
-        def _null_tqdm(*args, **kwargs):
-            if args:
-                return args[0]
-            return None
+        # Define a null tqdm class that mimics tqdm's interface but does nothing
+        class _SilentTqdm:
+            def __init__(self, iterable=None, *args, **kwargs):
+                self.iterable = iterable
+                # All other arguments (desc, total, file, position, etc.) are ignored.
+
+            def __iter__(self):
+                if self.iterable is not None:
+                    return iter(self.iterable)
+                # Support tqdm(total=N) usage without an explicit iterable
+                return iter([]) 
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                pass  # Do nothing on exit
+
+            def update(self, n=1):
+                pass  # Do nothing
+
+            def close(self):
+                pass  # Do nothing
+
+            def set_description(self, desc=None, refresh=True):
+                pass  # Do nothing
+
+            def set_postfix(self, ordered_dict=None, refresh=True, **kwargs):
+                pass  # Do nothing
             
-        # Completely replace all tqdm functionality
-        _tqdm.tqdm = _null_tqdm
-        _tqdm.tqdm.write = lambda *args, **kwargs: None
-        _tqdm.tqdm_notebook = _null_tqdm
-        _tqdm.trange = lambda *args, **kwargs: range(*args) if args else range(0)
+            @staticmethod
+            def write(s, file=None, end="\n", nolock=False):
+                pass  # Do nothing
         
-        # Override the module itself for good measure
-        sys.modules['tqdm'] = _tqdm
-        sys.modules['tqdm.auto'] = _tqdm
-    except:
-        pass  # If any errors, just continue
+        # Replace tqdm.tqdm with our silent class
+        tqdm_module_to_patch.tqdm = _SilentTqdm
+        
+        # Patch tqdm_notebook if it exists, as it's often a tqdm-like class
+        if hasattr(tqdm_module_to_patch, 'tqdm_notebook'):
+            tqdm_module_to_patch.tqdm_notebook = _SilentTqdm
+        else:
+            # If tqdm_notebook doesn't exist on the module, but some library might
+            # try to access it, we can add our silent version.
+            tqdm_module_to_patch.tqdm_notebook = _SilentTqdm
+        
+        # Patch trange to return an instance of _SilentTqdm
+        # trange(n, ...) is like tqdm(range(n), ...)
+        tqdm_module_to_patch.trange = lambda *range_args, **tqdm_kwargs: _SilentTqdm(
+            range(*range_args) if range_args else range(0), **tqdm_kwargs
+        )
+        
+        # Override the module in sys.modules to ensure that subsequent imports 
+        # of 'tqdm' or 'tqdm.auto' get this patched module.
+        sys.modules['tqdm'] = tqdm_module_to_patch
+        sys.modules['tqdm.auto'] = tqdm_module_to_patch
+        # Also for tqdm.notebook, to be comprehensive
+        sys.modules['tqdm.notebook'] = tqdm_module_to_patch
+    except Exception:
+        # If patching fails for any reason, it's not critical.
+        # The application will still run, but progress bars might be visible.
+        pass  # Continue execution if patching fails
         
     # Silence PyTorch hub messages about cache
     try:
