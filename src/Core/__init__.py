@@ -5,6 +5,9 @@ This module provides the core infrastructure components for the vertical slice a
 including events, commands, and interfaces for the system's components.
 """
 
+# Import progress bar control early to ensure tqdm is disabled project-wide
+from src.Infrastructure.ProgressBar import ProgressBarManager
+
 # First import interfaces to avoid circular imports
 from .Common.Interfaces.event_bus import IEventBus
 from .Common.Interfaces.command_handler import ICommandHandler

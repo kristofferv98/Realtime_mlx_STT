@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-# Only show wanted outputs in quiet mode (default)
+# Set environment variables to disable progress bars before ANY other imports
 import os
+os.environ['TQDM_DISABLE'] = '1'
+os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
+
+# Only show wanted outputs in quiet mode (default)
 import sys
 import warnings
 import builtins
@@ -46,14 +50,13 @@ os.environ['TORCH_HOME'] = os.path.expanduser('~/.cache/torch')
 os.environ['PYTHONIOENCODING'] = 'UTF-8'
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
-# Silence output in quiet mode
+# We'll use ProgressBarManager for tqdm progress bars
+# But import it later after command-line arguments are parsed
+# This is just a placeholder comment to indicate the change from the old approach
+# to the new ProgressBarManager-based approach
+
+# Silence PyTorch hub messages about cache in quiet mode
 if is_quiet_mode:
-    # We used to patch tqdm here, but it causes more problems than it solves
-    # Instead, we'll just ignore tqdm progress bars since they're not critical
-    # The selective print and stdout redirection will still hide most output
-    pass
-        
-    # Silence PyTorch hub messages about cache
     try:
         # Define a custom import hook to intercept PyTorch imports
         class SilentPyTorchImporter:
@@ -138,6 +141,8 @@ def main():
                         help="Enable debug output for VAD and wake word processing")
     parser.add_argument("--verbose", action="store_true",
                         help="Show detailed log messages (quiet mode is default)")
+    parser.add_argument("--no-progress-bars", action="store_true",
+                        help="Hide progress bars from tqdm and huggingface-hub")
     
     args = parser.parse_args()
     
@@ -158,11 +163,12 @@ def main():
     # Setup logging using the centralized logging system
     import logging
     from src.Infrastructure.Logging import LoggingModule, LogLevel
+    from src.Infrastructure.ProgressBar.ProgressBarManager import ProgressBarManager
     
-    # tqdm is already patched at the module level
+    # Initialize the ProgressBarManager to control tqdm progress bars
+    # Disable progress bars if explicitly requested with --no-progress-bars or in quiet mode
+    ProgressBarManager.initialize(disabled=args.no_progress_bars or is_quiet_mode)
     
-    # No need to restore stdout anymore - we're using print redirection instead
-        
     # Initialize logging with the appropriate level
     LoggingModule.initialize(
         # Set console level based on command line arguments - default to quiet (ERROR level)
@@ -262,6 +268,7 @@ def main():
                         if transcription_key not in seen_transcriptions:
                             seen_transcriptions.add(transcription_key)
                             print(f"\n🎤 Final transcription: {text} (confidence: {confidence:.2f})")
+                            print(f"\nListening for wake word '{args.wake_words}'...")
                     elif isinstance(result, dict):
                         if "text" in result:
                             # Direct dictionary with text field
@@ -273,24 +280,30 @@ def main():
                             if transcription_key not in seen_transcriptions:
                                 seen_transcriptions.add(transcription_key)
                                 print(f"\n🎤 Final transcription: {result['text']} (confidence: {result.get('confidence', 0.0):.2f})")
+                                print(f"\nListening for wake word '{args.wake_words}'...")
                         elif "error" in result:
                             # Error occurred
                             logger.error(f"Transcription error: {result['error']}")
                             print(f"\n❌ Transcription error: {result['error']}")
+                            print(f"\nListening for wake word '{args.wake_words}'...")
                         else:
                             # Dictionary structure without text field
                             logger.info(f"Final transcription: {result}")
                             print(f"\n🎤 Final transcription: {result}")
+                            print(f"\nListening for wake word '{args.wake_words}'...")
                     else:
                         # Unknown result structure
                         logger.info(f"Transcription complete: {result}")
                         print(f"\n🎤 Transcription complete: {result}")
+                        print(f"\nListening for wake word '{args.wake_words}'...")
                 else:
                     logger.warning("No transcription result returned")
                     print("\nNo transcription result returned")
+                    print(f"\nListening for wake word '{args.wake_words}'...")
             except Exception as e:
                 logger.error(f"Error transcribing speech: {e}", exc_info=True)
                 print(f"Error transcribing speech: {e}")
+                print(f"\nListening for wake word '{args.wake_words}'...")
                 # traceback will be included in the log due to exc_info=True
     
     # Register the transcription handler BEFORE registering modules
@@ -359,10 +372,9 @@ def main():
     
     def on_transcription_update(session_id, text, is_final, confidence):
         """Handle transcription update events."""
-        if is_final:
-            print(f"\n🎤 Final transcription: {text} (confidence: {confidence:.2f})")
-            print(f"\nListening for wake word '{args.wake_words}'...")
-        else:
+        # We're handling final transcriptions in conditional_silence_handler
+        # Only handle intermediate results here to avoid duplicates
+        if not is_final:
             # Print intermediate results on same line
             print(f"\r🎤 {text}", end="", flush=True)
     

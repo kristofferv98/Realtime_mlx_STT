@@ -15,6 +15,10 @@ from functools import lru_cache
 from queue import Queue, Empty
 from typing import Dict, List, Optional, Any, Tuple, Union
 
+# Set environment variables to disable progress bars
+os.environ['TQDM_DISABLE'] = '1'
+os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
+
 import mlx.core as mx
 import mlx.nn as nn
 import numpy as np

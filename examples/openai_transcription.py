@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Set environment variables to disable progress bars before ANY other imports
+import os
+os.environ['TQDM_DISABLE'] = '1'
+os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
+
 """
 OpenAI Transcription Example
 
@@ -25,14 +30,21 @@ import threading
 import signal
 from typing import Dict, Any, List, Optional
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
 # Add project root to path
 project_root = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
+
+# Import ProgressBarManager for controlling tqdm progress bars
+from src.Infrastructure.ProgressBar.ProgressBarManager import ProgressBarManager
+from src.Infrastructure.Logging import LoggingModule
+
+# Initialize the ProgressBarManager first - will be set based on arguments later
+ProgressBarManager.initialize(disabled=False)  # Default to showing progress bars
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = LoggingModule.get_logger(__name__)
 
 # Core imports
 from src.Core.Commands.command_dispatcher import CommandDispatcher
@@ -397,8 +409,13 @@ def main():
                       help="Disable transcription history accumulation")
     parser.add_argument("--history-length", type=int, default=10,
                       help="Number of recent transcriptions to maintain in history (default: 10)")
+    parser.add_argument("--no-progress-bars", action="store_true",
+                      help="Hide progress bars from tqdm and huggingface-hub")
     
     args = parser.parse_args()
+    
+    # Update ProgressBarManager based on arguments
+    ProgressBarManager.initialize(disabled=args.no_progress_bars)
     
     # Create and initialize the application
     app = OpenAITranscriptionApp(

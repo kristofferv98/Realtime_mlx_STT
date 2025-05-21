@@ -60,7 +60,8 @@ src/
 │   ├── WakeWordDetection/      # Wake word detection
 │   └── RemoteProcessing/       # Remote transcription
 ├── Infrastructure/             # Cross-cutting concerns
-│   └── Logging/                # Centralized logging system
+│   ├── Logging/                # Centralized logging system
+│   └── ProgressBar/            # Progress bar management
 └── Application/                # Public API facades
 ```
 
@@ -72,6 +73,7 @@ src/
 - **Transcription**: Processes audio using MLX-optimized Whisper models
 - **Event System**: Enables loose coupling between components
 - **Logging System**: Provides centralized logging with runtime configuration and log rotation
+- **Progress Bar Control**: Centralized management of progress bars for cleaner user output
 
 ## Usage Examples
 
@@ -168,11 +170,15 @@ The repository includes several ready-to-use example scripts:
    python examples/check_audio_devices.py
    ```
 
-7. **Configuring Logging** - The centralized logging system can be used in your applications:
+7. **Configuring Logging and Progress Bars** - The centralized systems can be used in your applications:
    ```python
-   # Import the logging module
+   # Import modules
    from src.Infrastructure.Logging import LoggingModule, LogLevel
+   from src.Infrastructure.ProgressBar.ProgressBarManager import ProgressBarManager
 
+   # Initialize progress bar control first (disable tqdm progress bars globally)
+   ProgressBarManager.initialize(disabled=True)
+   
    # Initialize logging with desired configuration
    LoggingModule.initialize(
        console_level="INFO",
@@ -196,11 +202,24 @@ The repository includes several ready-to-use example scripts:
    # python scripts/change_log_level.py AudioCapture DEBUG
    ```
 
-   You can also use environment variables:
+   You can control both logging and progress bars with environment variables:
    ```bash
-   # Set up logging environment
-   source scripts/set_logging_env.sh dev  # For development (verbose)
-   source scripts/set_logging_env.sh prod  # For production
+   # Set up environment with progress bars hidden (cleaner output)
+   source scripts/set_logging_env.sh prod
+   
+   # Set up environment with progress bars visible (helpful for debugging)
+   source scripts/set_logging_env.sh dev
+   
+   # Manually control progress bars
+   export DISABLE_PROGRESS_BARS=true  # Hide tqdm progress bars
+   ```
+   
+   Command-line arguments for controlling progress bars in example scripts:
+   ```bash
+   # Run with progress bars hidden (though progress bars are now disabled by default)
+   python examples/wake_word_detection.py --no-progress-bars
+   python examples/continuous_transcription.py --no-progress-bars
+   python examples/openai_transcription.py --no-progress-bars
    ```
 
 ## Testing
