@@ -31,6 +31,7 @@ dependencies = [
     "soundfile>=0.10.3",
     "colorama>=0.4.4",
     "onnxruntime>=1.15.0",
+    "pvporcupine>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -40,7 +41,7 @@ openai = [
     "requests>=2.28.0",
 ]
 wakeword = [
-    "pvporcupine>=3.0.0",
+    # pvporcupine>=3.0.0 now included in main dependencies
 ]
 dev = [
     "pytest>=7.0.0",
