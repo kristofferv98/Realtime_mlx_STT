@@ -8,6 +8,7 @@ Realtime_mlx_STT is a high-performance speech-to-text transcription library opti
 - **Apple Silicon optimization** using MLX with Neural Engine acceleration
 - **Voice activity detection** using both WebRTC and Silero models
 - **Wake word detection** for hands-free activation using Porcupine
+- **Server/Client architecture** with HTTP API and WebSocket support
 - **Centralized logging system** with runtime configuration and log rotation
 - **Vertical slice architecture** for modular and maintainable code
 - **Event-driven design** for flexible integration
@@ -62,7 +63,13 @@ src/
 ├── Infrastructure/             # Cross-cutting concerns
 │   ├── Logging/                # Centralized logging system
 │   └── ProgressBar/            # Progress bar management
-└── Application/                # Public API facades
+└── Application/                # Public API and server components
+    ├── Facade/                 # Direct library usage API
+    ├── Server/                 # HTTP/WebSocket server implementation
+    │   ├── Controllers/        # API endpoints for different feature areas
+    │   ├── WebSocket/          # Real-time event broadcasting
+    │   └── Configuration/      # Server and profile configuration
+    └── Client/                 # Python client library for server interaction
 ```
 
 ### Key Components
@@ -71,6 +78,8 @@ src/
 - **Voice Activity Detection**: Detects speech using WebRTC, Silero, or combined approaches
 - **Wake Word Detection**: Recognizes specific trigger phrases to activate the system
 - **Transcription**: Processes audio using MLX-optimized Whisper models
+- **Server**: FastAPI-based HTTP and WebSocket server for remote access
+- **Client Library**: Python client for interacting with the server
 - **Event System**: Enables loose coupling between components
 - **Logging System**: Provides centralized logging with runtime configuration and log rotation
 - **Progress Bar Control**: Centralized management of progress bars for cleaner user output
@@ -107,6 +116,57 @@ input("Press Enter to stop listening...")
 # Stop and clean up
 transcriber.stop_listening()
 transcriber.cleanup()
+```
+
+### Server/Client Usage
+
+```python
+# Server-side (run in a separate process)
+from src.Application.Server.ServerModule import ServerModule
+from src.Core.Commands.command_dispatcher import CommandDispatcher
+from src.Core.Events.event_bus import EventBus
+
+# Create command dispatcher and event bus
+command_dispatcher = CommandDispatcher()
+event_bus = EventBus()
+
+# Register all modules with command dispatcher and event bus
+# (Audio, VAD, Transcription, WakeWord modules would be registered here)
+
+# Start the server (default: http://127.0.0.1:8080)
+server = ServerModule.register(command_dispatcher, event_bus)
+
+# Client-side (in another process or machine)
+import requests
+import websocket
+import json
+import threading
+
+# Configure transcription
+requests.post("http://localhost:8080/transcription/configure", 
+    json={
+        "engine_type": "mlx_whisper",
+        "model_name": "whisper-large-v3-turbo",
+        "language": "en"
+    })
+
+# Start a transcription session
+response = requests.post("http://localhost:8080/transcription/session/start")
+session_id = response.json()["data"]["session_id"]
+
+# Connect to WebSocket for real-time events
+def on_message(ws, message):
+    data = json.loads(message)
+    if data["event"] == "transcription":
+        print(f"Transcription: {data['text']}")
+
+ws = websocket.WebSocketApp("ws://localhost:8080/events",
+                          on_message=on_message)
+threading.Thread(target=ws.run_forever, daemon=True).start()
+
+# Later, stop the transcription session
+requests.post("http://localhost:8080/transcription/session/stop",
+    json={"session_id": session_id})
 ```
 
 ### Included Example Scripts
@@ -224,21 +284,30 @@ The repository includes several ready-to-use example scripts:
 
 ## Testing
 
-The project includes comprehensive tests for each feature:
+The project includes comprehensive tests for each feature and component:
 
 ```bash
 # Run all tests
 python tests/run_tests.py
 
-# Run tests for a specific feature
+# Run tests for a specific feature or component
 python tests/run_tests.py -f VoiceActivityDetection
-
-# Run tests for Infrastructure components
 python tests/run_tests.py -f Infrastructure
+python tests/run_tests.py -f Application  # Server/Client tests
 
 # Run a specific test with verbose output
 python tests/run_tests.py -t webrtc_vad_test -v
+python tests/run_tests.py -t test_server_module -v
+
+# Test with PYTHONPATH (if imports fail)
+PYTHONPATH=/path/to/Realtime_mlx_STT python tests/run_tests.py
 ```
+
+The Server implementation includes tests for:
+- API Controllers (Transcription and System)
+- WebSocket connections and event broadcasting
+- Configuration and profile management
+- Command/Event integration
 
 ## Performance
 
