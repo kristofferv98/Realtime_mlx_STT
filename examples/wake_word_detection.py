@@ -6,6 +6,7 @@ import warnings
 import builtins
 import tempfile
 import importlib
+import threading
 
 # Store original stdout and print
 original_stdout = sys.stdout
@@ -86,9 +87,23 @@ if is_quiet_mode:
             @staticmethod
             def write(s, file=None, end="\n", nolock=False):
                 pass  # Do nothing
+                
+            # Add missing static methods that tqdm.tqdm might have
+            _lock = threading.RLock()  # Create a dummy lock
+            
+            @classmethod
+            def get_lock(cls):
+                return cls._lock
         
         # Replace tqdm.tqdm with our silent class
         tqdm_module_to_patch.tqdm = _SilentTqdm
+        
+        # Add class attributes to the tqdm class
+        # These are accessed statically in some libraries like huggingface_hub
+        tqdm_module_to_patch.tqdm.monitor_interval = 10  # Default monitor interval
+        tqdm_module_to_patch.tqdm.monitor = None  # Monitor object placeholder
+        tqdm_module_to_patch.tqdm.pandas = lambda *args, **kwargs: None  # pandas integration
+        tqdm_module_to_patch.tqdm.get_lock = _SilentTqdm.get_lock  # Lock method
         
         # Patch tqdm_notebook if it exists, as it's often a tqdm-like class
         if hasattr(tqdm_module_to_patch, 'tqdm_notebook'):
