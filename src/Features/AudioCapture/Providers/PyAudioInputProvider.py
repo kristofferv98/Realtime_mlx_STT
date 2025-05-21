@@ -5,7 +5,6 @@ This provider implements the IAudioProvider interface using PyAudio to
 capture audio from system microphones.
 """
 
-import logging
 import threading
 import time
 from typing import List, Dict, Any, Optional, Tuple
@@ -13,6 +12,9 @@ from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 import pyaudio
 from scipy import signal
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 from src.Core.Common.Interfaces.audio_provider import IAudioProvider
 from src.Core.Events.event_bus import IEventBus
@@ -53,7 +55,7 @@ class PyAudioInputProvider(IAudioProvider):
             audio_format: PyAudio format (default: paInt16)
             debug_mode: Whether to print debug information
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.event_bus = event_bus
         self.device_id = device_id
         self.target_sample_rate = sample_rate

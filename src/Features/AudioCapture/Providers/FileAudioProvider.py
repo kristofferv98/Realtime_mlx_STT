@@ -5,7 +5,6 @@ This provider implements the IAudioProvider interface to stream audio
 from file sources instead of microphones.
 """
 
-import logging
 import os
 import threading
 import time
@@ -14,6 +13,9 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 import numpy as np
 import soundfile as sf
 from scipy import signal
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 from src.Core.Common.Interfaces.audio_provider import IAudioProvider
 from src.Core.Events.event_bus import IEventBus
@@ -56,7 +58,7 @@ class FileAudioProvider(IAudioProvider):
             loop: Whether to loop the file when it reaches the end
             debug_mode: Whether to print debug information
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.event_bus = event_bus
         self.file_path = file_path
         self.target_sample_rate = target_sample_rate

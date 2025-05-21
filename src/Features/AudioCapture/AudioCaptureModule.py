@@ -5,8 +5,10 @@ This module serves as the main entry point for the AudioCapture feature,
 handling registration of commands, providers, and event handlers.
 """
 
-import logging
 from typing import Dict, List, Any, Optional, Callable
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 from src.Core.Commands.command_dispatcher import CommandDispatcher
 from src.Core.Events.event_bus import IEventBus
@@ -59,7 +61,7 @@ class AudioCaptureModule:
         Returns:
             AudioCommandHandler: The registered command handler
         """
-        logger = logging.getLogger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         logger.info("Registering AudioCapture feature")
         
         # Create providers

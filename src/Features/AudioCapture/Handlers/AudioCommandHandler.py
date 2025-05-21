@@ -5,8 +5,10 @@ This handler implements the ICommandHandler interface to process audio-related c
 like listing devices, selecting devices, and controlling recording.
 """
 
-import logging
 from typing import Any, Dict, List, Optional, Union, Type, cast
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 from src.Core.Common.Interfaces.command_handler import ICommandHandler
 from src.Core.Commands.command import Command
@@ -40,7 +42,7 @@ class AudioCommandHandler(ICommandHandler[Any]):
             providers: Dictionary of available audio providers (e.g., microphone, file)
             active_provider: Key of the provider to use by default
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.event_bus = event_bus
         self.providers = providers
         self.active_provider = active_provider
