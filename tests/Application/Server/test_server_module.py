@@ -168,15 +168,13 @@ class TestServer(unittest.TestCase):
         )
         
         # Check that event handlers were subscribed
-        self.mock_event_bus.subscribe.assert_any_call(
-            server.handle_transcription_update.__self__.__class__.handle_transcription_update.__func__.__get__(server, server.__class__),
-            server.handle_transcription_update
-        )
+        from src.Features.Transcription.Events.TranscriptionUpdatedEvent import TranscriptionUpdatedEvent
+        from src.Features.WakeWordDetection.Events.WakeWordDetectedEvent import WakeWordDetectedEvent
         
-        self.mock_event_bus.subscribe.assert_any_call(
-            server.handle_wake_word_detected.__self__.__class__.handle_wake_word_detected.__func__.__get__(server, server.__class__),
-            server.handle_wake_word_detected
-        )
+        # Simplified assertions that only check if subscribe was called with the right event types
+        # instead of complex method references
+        self.mock_event_bus.subscribe.assert_any_call(TranscriptionUpdatedEvent, server.handle_transcription_update)
+        self.mock_event_bus.subscribe.assert_any_call(WakeWordDetectedEvent, server.handle_wake_word_detected)
     
     @patch('src.Application.Server.ServerModule.uvicorn')
     def test_start_and_stop(self, mock_uvicorn):
