@@ -23,12 +23,16 @@ from src.Infrastructure.Logging.LoggingModule import get_logger
 
 from .WebSocket.WebSocketManager import WebSocketManager
 from .Configuration.ServerConfig import ServerConfig
+from .Configuration.ProfileManager import ProfileManager
+from .Controllers.TranscriptionController import TranscriptionController
+from .Controllers.SystemController import SystemController
 
 class Server:
     """Server implementation that integrates with the existing command/event system."""
     
     def __init__(self, command_dispatcher: CommandDispatcher, event_bus: EventBus, 
-                 host: str = "127.0.0.1", port: int = 8080):
+                 host: str = "127.0.0.1", port: int = 8080,
+                 cors_origins: List[str] = None):
         """
         Initialize the server.
         
@@ -37,6 +41,7 @@ class Server:
             event_bus: The event bus to use
             host: The host to bind to
             port: The port to bind to
+            cors_origins: List of allowed CORS origins
         """
         self.logger = get_logger(__name__)
         self.app = FastAPI(title="Speech-to-Text API")
@@ -48,47 +53,48 @@ class Server:
         self.running = False
         self.server_thread = None
         
+        # Setup profile manager
+        self.profile_manager = ProfileManager()
+        
         # Set up CORS
+        if cors_origins is None:
+            cors_origins = ["*"]
+            
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
+            allow_origins=cors_origins,
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
         )
         
-        # Set up routes
-        self._setup_routes()
+        # Register controllers
+        self._register_controllers()
         
         # Subscribe to events
         self._register_event_handlers()
-
-    def _setup_routes(self):
-        """Set up API routes."""
+    
+    def _register_controllers(self):
+        """Register API controllers."""
+        self.logger.info("Registering API controllers")
         
-        @self.app.get("/status")
-        async def get_status():
-            """Get system status."""
-            return {"status": "online"}
+        # Create controllers
+        transcription_controller = TranscriptionController(
+            command_dispatcher=self.command_dispatcher,
+            event_bus=self.event_bus
+        )
         
-        @self.app.post("/config")
-        async def update_config(config: Dict[str, Any]):
-            """Update system configuration."""
-            # Will be implemented by specific controllers
-            return {"status": "success"}
+        system_controller = SystemController(
+            command_dispatcher=self.command_dispatcher,
+            event_bus=self.event_bus,
+            profile_manager=self.profile_manager
+        )
         
-        @self.app.post("/start")
-        async def start_processing():
-            """Start speech processing."""
-            # Will be implemented by specific controllers
-            return {"status": "started"}
+        # Include routers in the app
+        self.app.include_router(transcription_controller.router)
+        self.app.include_router(system_controller.router)
         
-        @self.app.post("/stop")
-        async def stop_processing():
-            """Stop speech processing."""
-            # Will be implemented by specific controllers
-            return {"status": "stopped"}
-        
+        # Setup WebSocket endpoint
         @self.app.websocket("/events")
         async def websocket_endpoint(websocket: WebSocket):
             """Handle WebSocket connections."""
@@ -97,8 +103,9 @@ class Server:
             try:
                 while True:
                     data = await websocket.receive_json()
-                    # Handle incoming WebSocket commands - will be implemented
-                    pass
+                    # Handle incoming WebSocket commands
+                    # This will be expanded as needed
+                    self.logger.debug(f"Received WebSocket message: {data}")
             except WebSocketDisconnect:
                 self.websocket_manager.unregister(websocket)
             except Exception as e:
@@ -110,7 +117,7 @@ class Server:
         # These handlers will broadcast events to WebSocket clients
         self.event_bus.subscribe(TranscriptionUpdatedEvent, self.handle_transcription_update)
         self.event_bus.subscribe(WakeWordDetectedEvent, self.handle_wake_word_detected)
-        # More event handlers will be added
+        # More event handlers will be added as needed
     
     def handle_transcription_update(self, event: TranscriptionUpdatedEvent):
         """Handle transcription update events."""
@@ -191,7 +198,8 @@ class ServerModule:
             command_dispatcher=command_dispatcher,
             event_bus=event_bus,
             host=config.host,
-            port=config.port
+            port=config.port,
+            cors_origins=config.cors_origins
         )
         
         # Start the server if auto_start is enabled
