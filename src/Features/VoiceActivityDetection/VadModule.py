@@ -14,6 +14,7 @@ from src.Features.VoiceActivityDetection.Commands.DetectVoiceActivityCommand imp
 from src.Features.VoiceActivityDetection.Commands.ConfigureVadCommand import ConfigureVadCommand
 from src.Features.VoiceActivityDetection.Commands.EnableVadProcessingCommand import EnableVadProcessingCommand
 from src.Features.VoiceActivityDetection.Commands.DisableVadProcessingCommand import DisableVadProcessingCommand
+from src.Features.VoiceActivityDetection.Commands.ClearVadPreSpeechBufferCommand import ClearVadPreSpeechBufferCommand
 from src.Features.VoiceActivityDetection.Events.SpeechDetectedEvent import SpeechDetectedEvent
 from src.Features.VoiceActivityDetection.Events.SilenceDetectedEvent import SilenceDetectedEvent
 from src.Features.VoiceActivityDetection.Handlers.VoiceActivityHandler import VoiceActivityHandler
@@ -62,6 +63,7 @@ class VadModule:
         command_dispatcher.register_handler(ConfigureVadCommand, handler)
         command_dispatcher.register_handler(EnableVadProcessingCommand, handler)
         command_dispatcher.register_handler(DisableVadProcessingCommand, handler)
+        command_dispatcher.register_handler(ClearVadPreSpeechBufferCommand, handler)
         
         # Configure default detector
         try:
