@@ -13,6 +13,16 @@ This specification outlines a plan to transform the current codebase into a modu
 5. **Process Isolation**: Provide options to run speech processing in a separate process
 6. **Language Agnostic**: Support non-Python clients through a standard API
 7. **Resource Management**: Enable easy startup and shutdown of services
+8. **Non-Intrusive**: Work with the existing codebase without modifying core functionality
+
+## Compatibility & Integration Approach
+
+This implementation will be designed to work seamlessly with the existing codebase:
+
+1. **Zero Core Modifications**: The server and client library will be built on top of the existing codebase without modifying any of the core functionality.
+2. **Uses Existing Patterns**: Will utilize the current command/event architecture already in place.
+3. **Respects Vertical Slice**: Follows the established vertical slice architecture by adding a new slice without disrupting others.
+4. **Maintains Stability**: All existing functionality will continue to work exactly as before.
 
 ## Architecture Overview
 
@@ -24,12 +34,17 @@ The system will support three primary integration methods:
 
 ![Architecture Diagram](https://mermaid.ink/img/pako:eNqNk99O4zAQxl9l5YtS0W1aQgsLiEKraFsJ2JLuJaqqyHE2jVUnNrZTFUV5d8ZJE5qFWy5iz_f9PM545o_b6MQSvPGG-BZqWVgD7fojuOSzjcqCeRSiD5nJRRwXIAVoM9cTVaktnDmrKtWa9p3OokkzKwYfvYW6y_2JZ-VuJf-FWwH7gjrfmdyH-W2M_gJoYM8KHu5r4FveFW6ZmXAYKhtlKpSjLQKbqRtmVm2pUy9lKczpEEY5pJUlNuV5KdAtBw5eZRMuoWp45dBYrwWdkqkhlbO9UhsxgsMBb_PgWq6KZ2ZLOzraqUo1wuwhbzpKVAHBz6NzSPtUHwQrDMjuSddOqP5Wm5ZDhLpD7pzOMVt-Ib1rpawKBpnSpXvFXdgGz9SSvq5O6d7p1C1KvJrIPW0nZwUttqJLkQhbqZ6rmNd6GGKYW3sbVvE8dPz_e55QUuRy2Md1x5-sZ3A5egSMR9uX7d-t4ehq2aX5XRf3h-XwJQ7LQeN2JbUzABDxh-h0m2bNSUhc51DGWHRBxiSwQd4Ru1TT4yomXQ2fYqZXM5JQUOcZSXeOicTrx90mZDaPyZYkNBlHpJuckcfZhIwn5JjQ_aSITwhNz8l0Rnbx4d1BTcKnmX-ufB5OlzOiUzIeMjJm-XjYp3RGZvT6Q0aaT8_I7TmZpGQ5WZG_aLYbVA?type=png)
 
-## Library & Server Structure
+## Updated Library & Server Structure
 
 ```
 src/
-├── Infrastructure/
-│   ├── Server/
+├── Application/                        # Main application layer - NEW LOCATION FOR SERVER
+│   ├── Facade/                         # Simplified library interfaces
+│   │   ├── SpeechProcessor.py          # Main facade for library use
+│   │   ├── ServerFacade.py             # Facade for server operations 
+│   │   └── SpeechBuilder.py            # Builder pattern implementation
+│   │
+│   ├── Server/                         # Server implementation - PLACED IN APPLICATION LAYER
 │   │   ├── README.md                   # Server documentation
 │   │   ├── ServerModule.py             # Main server module
 │   │   ├── Controllers/                # API endpoints
@@ -61,12 +76,6 @@ src/
 │       │   └── ClientModels.py         # Request/response models
 │       └── Handlers/                   # Event handlers
 │           └── EventHandlers.py        # Handler registration
-│
-├── Application/                        # Library entry points
-│   ├── Facade/                         # Simplified library interfaces
-│   │   ├── SpeechProcessor.py          # Main facade for library use
-│   │   ├── ServerFacade.py             # Facade for server operations
-│   │   └── SpeechBuilder.py            # Builder pattern implementation
 ```
 
 ## Server-Client Architecture Details
@@ -174,21 +183,19 @@ src/
        ws.run_forever()
    ```
 
-## Server Implementation Details
+## Non-Intrusive Integration with Existing Codebase
 
-### 1. Server Module Integration
-
-The server will integrate with the existing system through the command/event architecture:
+The server implementation will integrate with the existing codebase without modifying any core functionality:
 
 ```python
 class ServerModule:
     @staticmethod
     def register(command_dispatcher, event_bus, host="127.0.0.1", port=8080):
         """Register the server module with the system."""
-        # Create server instance
+        # Create server instance - uses existing command_dispatcher and event_bus
         server = Server(command_dispatcher, event_bus, host, port)
         
-        # Register event handlers
+        # Register event handlers - subscribes to existing events
         event_bus.subscribe(TranscriptionUpdatedEvent, server.handle_transcription_update)
         event_bus.subscribe(WakeWordDetectedEvent, server.handle_wake_word_detected)
         # ...other event subscriptions
@@ -199,7 +206,13 @@ class ServerModule:
         return server
 ```
 
-### 2. WebSocket Event Broadcasting
+All communication will happen through the existing command/event architecture:
+
+1. **Server receiving API requests**: Translates them to appropriate commands from existing modules
+2. **Server sending responses**: Subscribes to events from existing modules and forwards them to clients
+3. **No modification of core logic**: All existing modules continue to work as they always have
+
+### WebSocket Event Broadcasting
 
 ```python
 class WebSocketManager:
@@ -225,7 +238,7 @@ class WebSocketManager:
             client.send_json(message)
 ```
 
-### 3. Controller Example
+### Controller Example
 
 ```python
 class TranscriptionController:
@@ -234,6 +247,7 @@ class TranscriptionController:
     
     async def configure(self, request):
         """Configure transcription engine."""
+        # Uses existing ConfigureTranscriptionCommand
         command = ConfigureTranscriptionCommand(
             engine_type=request.engine,
             model_name=request.model,
@@ -242,20 +256,23 @@ class TranscriptionController:
             options=request.options
         )
         
+        # Dispatches to existing command handlers
         result = self.command_dispatcher.dispatch(command)
         return {"status": "success", "result": result}
     
     async def start_session(self, request):
         """Start a transcription session."""
+        # Uses existing StartTranscriptionSessionCommand
         command = StartTranscriptionSessionCommand(
             session_id=request.session_id
         )
         
+        # Dispatches to existing command handlers
         result = self.command_dispatcher.dispatch(command)
         return {"status": "success", "session_id": request.session_id}
 ```
 
-### 4. Server Configuration
+### Server Configuration
 
 ```python
 class ServerConfig:
@@ -554,7 +571,7 @@ class SpeechClient:
 ## Implementation Plan
 
 ### Phase 1: Server Framework (2 weeks)
-1. Set up basic server structure with FastAPI
+1. Set up basic server structure with FastAPI in the Application/Server directory
 2. Implement HTTP API endpoints
 3. Implement WebSocket event broadcasting
 4. Create server configuration system
@@ -579,9 +596,18 @@ class SpeechClient:
 3. Document API endpoints
 4. Create user guides
 
+## Integration with Existing Code
+
+The implementation will respect the current codebase's design:
+
+1. **No Modification of Existing Modules**: All core modules (Audio, VAD, Wake Word, Transcription) remain untouched
+2. **Uses Existing Command/Event System**: Translates API calls to existing commands
+3. **Forwards Events to Clients**: Subscribes to existing events and forwards them over WebSockets
+4. **Maintains Separation of Concerns**: Architectural patterns are preserved
+
 ## Conclusion
 
-This server-based architecture provides maximum flexibility for integrating speech recognition into applications. By supporting both direct library usage and client-server interactions, developers can choose the most appropriate integration method for their use case. The system remains true to the vertical slice architecture while adding a powerful new way to access its functionality.
+This server-based architecture provides maximum flexibility for integrating speech recognition into applications. By supporting both direct library usage and client-server interactions, developers can choose the most appropriate integration method for their use case. 
 
 The server approach offers several key advantages:
 - Process isolation for stability
@@ -590,4 +616,4 @@ The server approach offers several key advantages:
 - Resource management with clear start/stop controls
 - Simplified configuration through profiles
 
-This design balances simplicity with power, allowing both straightforward use cases and complex integrations.
+Most importantly, this approach allows us to build on top of the existing codebase without modifying any core functionality. The result is a powerful extension that provides new integration options while maintaining compatibility with all existing features.
