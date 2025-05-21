@@ -90,9 +90,17 @@ from typing import Optional, List
 # Try to import pyautogui (needed for auto-paste functionality)
 try:
     import pyautogui
+    pyautogui.FAILSAFE = False  # Disable fail-safe feature
     PYAUTOGUI_AVAILABLE = True
-except ImportError:
+    print("PyAutoGUI successfully imported")
+except ImportError as e:
     PYAUTOGUI_AVAILABLE = False
+    print(f"PyAutoGUI import failed: {e}")
+    print("To enable auto-paste functionality, install PyAutoGUI with:")
+    print("  uv pip install pyautogui")
+except Exception as e:
+    PYAUTOGUI_AVAILABLE = False
+    print(f"PyAutoGUI import failed with unexpected error: {e}")
 
 from src.Core.Events.event_bus import EventBus
 from src.Core.Commands.command_dispatcher import CommandDispatcher
@@ -114,6 +122,9 @@ def copy_to_clipboard(text, auto_paste=True):
         tuple: (copy_success, paste_success) indicating success of each operation
     """
     try:
+        # Give the user a moment to switch to their target application if needed
+        time.sleep(0.1)
+        
         # Copy to clipboard
         process = subprocess.Popen('pbcopy', env={'LANG': 'en_US.UTF-8'}, stdin=subprocess.PIPE)
         process.communicate(text.encode('utf-8'))
@@ -121,7 +132,7 @@ def copy_to_clipboard(text, auto_paste=True):
         # Auto-paste if enabled and pyautogui is available
         if auto_paste and PYAUTOGUI_AVAILABLE:
             # Brief pause to ensure text is in clipboard
-            time.sleep(0.1)
+            time.sleep(0.2)
             # Simulate Command+V keystroke
             pyautogui.hotkey('command', 'v')
             return True, True  # Both copy and paste successful
@@ -129,6 +140,16 @@ def copy_to_clipboard(text, auto_paste=True):
         return True, False  # Copy successful, paste not attempted
     except Exception as e:
         print(f"Error with clipboard operation: {e}")
+        
+        # Fallback: try direct typing if clipboard method fails and auto-paste is enabled
+        if auto_paste and PYAUTOGUI_AVAILABLE:
+            try:
+                print("Attempting direct typing as fallback...")
+                pyautogui.write(text)
+                return True, True
+            except Exception as typing_error:
+                print(f"Direct typing fallback also failed: {typing_error}")
+                
         return False, False  # Operation failed
 
 
