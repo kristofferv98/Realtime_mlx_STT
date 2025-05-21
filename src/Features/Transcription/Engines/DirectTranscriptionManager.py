@@ -5,8 +5,10 @@ This module provides a simplified manager for transcription engines without usin
 separate processes, reducing complexity and potential synchronization issues.
 """
 
-import logging
 from typing import Dict, Any, Optional, Union
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 from src.Features.Transcription.Engines.DirectMlxWhisperEngine import DirectMlxWhisperEngine
 from src.Features.Transcription.Engines.OpenAITranscriptionEngine import OpenAITranscriptionEngine
@@ -23,7 +25,7 @@ class DirectTranscriptionManager:
     
     def __init__(self):
         """Initialize the transcription manager."""
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.engine = None
         self._engine_type = None
         

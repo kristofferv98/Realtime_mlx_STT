@@ -5,10 +5,12 @@ This handler manages transcription sessions, processes audio data,
 and publishes transcription events.
 """
 
-import logging
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Type, Union, cast
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 # Core imports
 from typing import TYPE_CHECKING
@@ -58,7 +60,7 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
         Args:
             event_bus: Event bus for publishing events
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.event_bus = event_bus
         
         # Active sessions with tracking for automatic cleanup

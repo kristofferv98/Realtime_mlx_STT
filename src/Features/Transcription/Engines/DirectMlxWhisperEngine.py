@@ -7,7 +7,6 @@ model for Apple Silicon without process isolation.
 
 import base64
 import json
-import logging
 import math
 import os
 import threading
@@ -21,6 +20,9 @@ import mlx.nn as nn
 import numpy as np
 import tiktoken
 from huggingface_hub import hf_hub_download, snapshot_download
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 from src.Core.Common.Interfaces.transcription_engine import ITranscriptionEngine
 
@@ -329,7 +331,7 @@ def load_audio(file_path, sr=16000):
     Returns:
         mx.array: Audio data as mx.array
     """
-    logger = logging.getLogger(__name__)
+    logger = LoggingModule.get_logger(__name__)
     logger.info(f"Loading audio from file: {file_path}")
     
     # TEMPORARY DEBUG: Extra file validation
@@ -415,7 +417,7 @@ def log_mel_spectrogram(audio, n_mels=128, padding=0):
     Returns:
         mx.array: Log-mel spectrogram
     """
-    logger = logging.getLogger(__name__)
+    logger = LoggingModule.get_logger(__name__)
     
     # TEMPORARY DEBUG: Log detailed information about input
     if isinstance(audio, str):
@@ -517,7 +519,7 @@ class Transcriber(nn.Module):
         Returns:
             str: Transcribed text
         """
-        logger = logging.getLogger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         raw = log_mel_spectrogram(path_audio).astype(mx.float16)
         sot = mx.array([[50258, 50360, 50365]]) if any_lang else mx.array([[50258, 50259, 50360, 50365]])
         self.len_sot = sot.shape[-1]
@@ -537,7 +539,7 @@ class Transcriber(nn.Module):
     
     def recurrent(self, raw, sot):
         """Process audio sequentially for higher accuracy."""
-        logger = logging.getLogger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         logger.info(f"recurrent: Input spectrogram shape={raw.shape}, length={len(raw)}")
         
         # Handle different audio segment lengths
@@ -645,7 +647,7 @@ class Transcriber(nn.Module):
     
     def parallel(self, raw, sot):
         """Process audio in parallel for faster processing."""
-        logger = logging.getLogger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         
         # Log the raw audio spectrogram shape
         logger.info(f"parallel: Input spectrogram shape={raw.shape}")
@@ -750,7 +752,7 @@ class Transcriber(nn.Module):
     def step(self, mel, txt):
         """Process a single step of transcription."""
         # Log the mel shape for debugging
-        logger = logging.getLogger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         chunk_size = mel.shape[1]  # Get the chunk size (could be 1000 or 3000 or other)
         logger.info(f"Processing step with mel shape: {mel.shape} (chunk size: {chunk_size})")
         
@@ -801,7 +803,7 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
             streaming: Whether to use streaming mode
             **kwargs: Additional configuration options
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         
         # Configuration
         self.model_name = model_name

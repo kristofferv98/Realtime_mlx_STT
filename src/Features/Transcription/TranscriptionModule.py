@@ -5,10 +5,12 @@ This module serves as the main entry point for the Transcription feature,
 handling registration of commands, handlers, and providing a public API.
 """
 
-import logging
 import uuid
 from typing import Dict, List, Any, Optional, Callable, Union
 import numpy as np
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 # Core imports
 from src.Core.Commands.command_dispatcher import CommandDispatcher
@@ -63,7 +65,7 @@ class TranscriptionModule:
         Returns:
             TranscriptionCommandHandler: The registered command handler
         """
-        logger = logging.getLogger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         logger.info("Registering Transcription feature")
         
         # Create command handler
@@ -273,7 +275,7 @@ class TranscriptionModule:
         Returns:
             Dict[str, Any]: Transcription result
         """
-        logger = logging.getLogger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         logger.info(f"Transcribing file: {file_path}")
         
         try:
@@ -457,7 +459,7 @@ class TranscriptionModule:
             auto_start_on_speech: Whether to automatically start a new transcription 
                                  session when speech is detected
         """
-        logger = logging.getLogger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         logger.info("Registering VAD integration for transcription")
         
         # Import VAD events

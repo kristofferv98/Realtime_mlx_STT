@@ -5,7 +5,6 @@ This module implements the ITranscriptionEngine interface using OpenAI's GPT-4o-
 models for cloud-based speech-to-text conversion.
 """
 
-import logging
 import os
 import tempfile
 import threading
@@ -16,6 +15,9 @@ from typing import Dict, List, Optional, Any, Tuple
 import numpy as np
 import requests
 import soundfile as sf
+
+# Infrastructure imports
+from src.Infrastructure.Logging import LoggingModule
 
 from src.Core.Common.Interfaces.transcription_engine import ITranscriptionEngine
 
@@ -39,7 +41,7 @@ class OpenAITranscriptionEngine(ITranscriptionEngine):
             streaming: Whether to use streaming mode
             **kwargs: Additional configuration options
         """
-        self.logger = logging.getLogger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         
         # Configuration
         self.model_name = model_name
