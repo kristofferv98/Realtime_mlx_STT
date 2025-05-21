@@ -1,4 +1,110 @@
 #!/usr/bin/env python3
+# Only show wanted outputs in quiet mode (default)
+import os
+import sys
+import warnings
+import builtins
+import tempfile
+import importlib
+
+# Store original stdout and print
+original_stdout = sys.stdout
+original_print = builtins.print
+
+# Special print function that only prints allowed messages
+def selective_print(*args, **kwargs):
+    # Convert all args to strings and join
+    text = " ".join(str(arg) for arg in args if arg is not None)
+    # Allowed prefixes for user-friendly output
+    allowed_prefixes = [
+        "Starting audio", "Listening for", "👂", "🔊", "💤", "Say '",
+        "Speech detected", "🎤 Final", "⏱️"
+    ]
+    # Only print if message starts with one of the allowed prefixes
+    if any(text.strip().startswith(prefix) for prefix in allowed_prefixes):
+        # Use original stdout and print
+        kwargs.pop('file', None)  # Remove file if present
+        original_print(*args, file=original_stdout, **kwargs)
+
+# Define quiet mode condition
+is_quiet_mode = "--debug" not in sys.argv and "--verbose" not in sys.argv
+seen_transcriptions = set()  # Track seen transcriptions to avoid duplicates
+null_file = open(os.devnull, 'w')
+
+# If in quiet mode, suppress all output except selected prints
+if is_quiet_mode:
+    # Override print to our selective print
+    builtins.print = selective_print
+    # Redirect stdout to null
+    sys.stdout = null_file
+    # Suppress all Python warnings
+    warnings.filterwarnings('ignore')
+
+# Environment variables for quieter operation
+os.environ['PYTHONWARNINGS'] = 'ignore'
+os.environ['TORCH_HOME'] = os.path.expanduser('~/.cache/torch')
+os.environ['PYTHONIOENCODING'] = 'UTF-8'
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
+# Silence output in quiet mode
+if is_quiet_mode:
+    # Disable tqdm progress bars
+    try:
+        # Try to import and monkey patch tqdm before any other imports
+        import tqdm as _tqdm
+        
+        # Save original tqdm
+        _original_tqdm = _tqdm.tqdm
+        
+        # Create null implementation
+        def _null_tqdm(*args, **kwargs):
+            if args:
+                return args[0]
+            return None
+            
+        # Completely replace all tqdm functionality
+        _tqdm.tqdm = _null_tqdm
+        _tqdm.tqdm.write = lambda *args, **kwargs: None
+        _tqdm.tqdm_notebook = _null_tqdm
+        _tqdm.trange = lambda *args, **kwargs: range(*args) if args else range(0)
+        
+        # Override the module itself for good measure
+        sys.modules['tqdm'] = _tqdm
+        sys.modules['tqdm.auto'] = _tqdm
+    except:
+        pass  # If any errors, just continue
+        
+    # Silence PyTorch hub messages about cache
+    try:
+        # Define a custom import hook to intercept PyTorch imports
+        class SilentPyTorchImporter:
+            def find_spec(self, fullname, path, target=None):
+                return None  # Let the default importer handle it
+            
+            def exec_module(self, module):
+                # If this is torch.hub, override the load function
+                if module.__name__ == 'torch.hub':
+                    original_load = module.load
+                    
+                    # Create silent version of the load function
+                    def silent_load(*args, **kwargs):
+                        # Redirect stdout during load
+                        old_stdout = sys.stdout
+                        sys.stdout = null_file
+                        try:
+                            result = original_load(*args, **kwargs)
+                            return result
+                        finally:
+                            sys.stdout = old_stdout
+                    
+                    # Replace the function
+                    module.load = silent_load
+                    
+        # Add our hook to sys.meta_path
+        sys.meta_path.insert(0, SilentPyTorchImporter())
+    except:
+        pass  # If any errors, just continue
+
 """
 Wake word detection example.
 
@@ -8,6 +114,16 @@ a two-stage activation approach for improved efficiency:
 
 1. First stage: Only wake word detection runs continuously
 2. Second stage: VAD and transcription activated only after wake word detection
+
+Running modes:
+* Default (quiet): Shows only user output with emojis, hides log messages
+  $ python -m examples.wake_word_detection
+  
+* Verbose mode: Shows detailed INFO-level logs and user output
+  $ python -m examples.wake_word_detection --verbose
+  
+* Debug mode: Shows all DEBUG-level logs for detailed troubleshooting
+  $ python -m examples.wake_word_detection --debug
 """
 
 import os
@@ -27,6 +143,8 @@ from src.Features.Transcription.TranscriptionModule import TranscriptionModule
 
 def main():
     """Run the wake word detection example."""
+    # We already set up quiet mode and print redirection at the top of the file
+    global is_quiet_mode, seen_transcriptions
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Wake word detection example")
     parser.add_argument("--wake-words", type=str, default="porcupine",
@@ -39,6 +157,8 @@ def main():
                         help="Timeout in seconds to wait for speech after wake word detection")
     parser.add_argument("--debug", action="store_true",
                         help="Enable debug output for VAD and wake word processing")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Show detailed log messages (quiet mode is default)")
     
     args = parser.parse_args()
     
@@ -56,31 +176,151 @@ def main():
     event_bus = EventBus()
     command_dispatcher = CommandDispatcher()
     
-    # Create log directory if it doesn't exist
-    os.makedirs("logs", exist_ok=True)
-    
-    # Setup logging
+    # Setup logging using the centralized logging system
     import logging
-    logging.basicConfig(
-        level=logging.INFO if not args.debug else logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler("logs/wake_word_example.log"),
-            logging.StreamHandler()
-        ]
+    from src.Infrastructure.Logging import LoggingModule, LogLevel
+    
+    # tqdm is already patched at the module level
+    
+    # No need to restore stdout anymore - we're using print redirection instead
+        
+    # Initialize logging with the appropriate level
+    LoggingModule.initialize(
+        # Set console level based on command line arguments - default to quiet (ERROR level)
+        console_level=LogLevel.DEBUG if args.debug else (LogLevel.INFO if args.verbose else LogLevel.ERROR),
+        file_enabled=True,  # Always log to file for debugging regardless of console settings
+        file_path="logs/wake_word_example.log",
+        rotation_enabled=True,
+        start_control_server=True,  # Enable runtime log level adjustment
+        # Specify format as strings to avoid any enum conversion issues
+        console_format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        file_format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        feature_levels={
+            "WakeWordDetection": LogLevel.DEBUG if args.debug else LogLevel.INFO,
+            "VoiceActivityDetection": LogLevel.DEBUG if args.debug else LogLevel.INFO,
+            "Transcription": LogLevel.DEBUG if args.debug else LogLevel.INFO,
+            "AudioCapture": LogLevel.DEBUG if args.debug else LogLevel.INFO
+        }
     )
+    
+    # Get a logger for this module
+    logger = LoggingModule.get_logger(__name__)
+    
+    # Import needed event types
+    from src.Features.VoiceActivityDetection.Events.SilenceDetectedEvent import SilenceDetectedEvent
+    from src.Features.VoiceActivityDetection.Events.SpeechDetectedEvent import SpeechDetectedEvent
+    from src.Features.WakeWordDetection.Events.WakeWordDetectedEvent import WakeWordDetectedEvent
+    from src.Features.WakeWordDetection.Events.WakeWordTimeoutEvent import WakeWordTimeoutEvent
     
     # Variables to track state
     is_wake_word_active = False
     vad_processing_enabled = False
+    # Make is_quiet_mode available to inner functions (already defined at the top of main())
     
-    # Debug print function for monitoring state changes
+    # Debug print function for monitoring state changes using logger
     def debug_print(message):
-        if args.debug:
-            print(f"Debug - {message}")
+        # Use logger.debug instead of printing directly
+        logger.debug(message)
+    
+    # Define the transcription handler
+    def conditional_silence_handler(event):
+        # Log detailed technical information for debugging purposes
+        # These logs are primarily for developers and debugging, not for end users
+        logger.debug(f"Transcription handler called")
+        logger.debug(f"is_wake_word_active: {is_wake_word_active}")
+        logger.debug(f"event has audio_reference: {hasattr(event, 'audio_reference')}")
+        logger.debug(f"audio_reference is not None: {hasattr(event, 'audio_reference') and event.audio_reference is not None}")
+        
+        # Process regardless of wake_word_active state for debugging
+        if hasattr(event, 'audio_reference') and event.audio_reference is not None:
+            logger.debug("Audio reference found, attempting transcription")
+            # Process the complete speech segment with transcription
+            try:
+                # We have the complete audio segment, now transcribe it using TranscriptionModule's static methods
+                # Create a unique session ID for this transcription
+                session_id = f"wake-{event.speech_id}"
+                
+                # Use transcribe_audio with the audio reference
+                audio_data = event.audio_reference
+                # Debug-level logging for technical details about the audio data
+                logger.debug(f"Audio data ready for transcription - type: {type(audio_data)}")
+                if hasattr(audio_data, 'shape'):
+                    logger.debug(f"Audio data shape: {audio_data.shape}")
+                elif hasattr(audio_data, '__len__'):
+                    logger.debug(f"Audio data length: {len(audio_data)}")
+                else:
+                    logger.debug(f"Audio data has no shape or length attributes")
+                
+                try:
+                    # Use debug level for technical execution steps
+                    logger.debug("Calling TranscriptionModule.transcribe_audio...")
+                    result = TranscriptionModule.transcribe_audio(
+                        command_dispatcher,
+                        audio_data=audio_data,
+                        session_id=session_id,
+                        is_first_chunk=True,
+                        is_last_chunk=True
+                    )
+                    logger.debug("TranscriptionModule.transcribe_audio completed")
+                except Exception as e:
+                    logger.error(f"Error in TranscriptionModule.transcribe_audio: {e}", exc_info=True)
+                    raise  # Re-raise to be caught by outer exception handler
+                
+                logger.debug(f"transcription result: {result}")
+                
+                # Print the result directly
+                if result:
+                    # TranscriptionModule.transcribe_audio returns a dictionary with text and other fields,
+                    # but the structure might be nested in a list of results
+                    if isinstance(result, list) and len(result) > 0:
+                        text = result[0].get('text', '')
+                        confidence = result[0].get('confidence', 0.0)
+                        # Log technical details at debug level, user-friendly at info level
+                        logger.debug(f"Final transcription text: {text}")
+                        logger.info(f"Transcription complete with confidence: {confidence:.2f}")
+                        # Check if we've already seen this transcription to avoid duplicates
+                        transcription_key = f"{text}_{confidence:.2f}"
+                        if transcription_key not in seen_transcriptions:
+                            seen_transcriptions.add(transcription_key)
+                            print(f"\n🎤 Final transcription: {text} (confidence: {confidence:.2f})")
+                    elif isinstance(result, dict):
+                        if "text" in result:
+                            # Direct dictionary with text field
+                            # Log technical details at debug level, user-friendly at info level
+                            logger.debug(f"Final transcription text: {result['text']}")
+                            logger.info(f"Transcription complete with confidence: {result.get('confidence', 0.0):.2f}")
+                            # Check if we've already seen this transcription to avoid duplicates
+                            transcription_key = f"{result['text']}_{result.get('confidence', 0.0):.2f}"
+                            if transcription_key not in seen_transcriptions:
+                                seen_transcriptions.add(transcription_key)
+                                print(f"\n🎤 Final transcription: {result['text']} (confidence: {result.get('confidence', 0.0):.2f})")
+                        elif "error" in result:
+                            # Error occurred
+                            logger.error(f"Transcription error: {result['error']}")
+                            print(f"\n❌ Transcription error: {result['error']}")
+                        else:
+                            # Dictionary structure without text field
+                            logger.info(f"Final transcription: {result}")
+                            print(f"\n🎤 Final transcription: {result}")
+                    else:
+                        # Unknown result structure
+                        logger.info(f"Transcription complete: {result}")
+                        print(f"\n🎤 Transcription complete: {result}")
+                else:
+                    logger.warning("No transcription result returned")
+                    print("\nNo transcription result returned")
+            except Exception as e:
+                logger.error(f"Error transcribing speech: {e}", exc_info=True)
+                print(f"Error transcribing speech: {e}")
+                # traceback will be included in the log due to exc_info=True
+    
+    # Register the transcription handler BEFORE registering modules
+    # to ensure it has priority over other handlers
+    event_bus.subscribe(SilenceDetectedEvent, conditional_silence_handler)
+    logger.info("Registered conditional silence handler for transcription")
     
     # Register modules
-    print(f"Initializing modules...")
+    logger.info("Initializing modules...")
     audio_module = AudioCaptureModule.register(command_dispatcher, event_bus)
     vad_module = VadModule.register(command_dispatcher, event_bus, processing_enabled=False)  # Start with VAD disabled
     transcription_module = TranscriptionModule.register(command_dispatcher, event_bus)
@@ -94,75 +334,8 @@ def main():
         access_key=access_key
     )
     
-    # Import needed event types
-    from src.Features.VoiceActivityDetection.Events.SilenceDetectedEvent import SilenceDetectedEvent
-    from src.Features.VoiceActivityDetection.Events.SpeechDetectedEvent import SpeechDetectedEvent
-    from src.Features.WakeWordDetection.Events.WakeWordDetectedEvent import WakeWordDetectedEvent
-    from src.Features.WakeWordDetection.Events.WakeWordTimeoutEvent import WakeWordTimeoutEvent
-    
-    # Create a special SilenceDetectedEvent handler that only processes events when wake word is active
-    def conditional_silence_handler(event):
-        if args.debug:
-            print(f"\nDebug - conditional_silence_handler called")
-            print(f"Debug - is_wake_word_active: {is_wake_word_active}")
-            print(f"Debug - vad_processing_enabled: {vad_processing_enabled}")
-            print(f"Debug - event has audio_reference: {hasattr(event, 'audio_reference')}")
-            print(f"Debug - audio_reference is not None: {hasattr(event, 'audio_reference') and event.audio_reference is not None}")
-        
-        if is_wake_word_active and hasattr(event, 'audio_reference') and event.audio_reference is not None:
-            # Process the complete speech segment with transcription
-            try:
-                # We have the complete audio segment, now transcribe it using TranscriptionModule's static methods
-                # Create a unique session ID for this transcription
-                session_id = f"wake-{event.speech_id}"
-                
-                # Use transcribe_audio with the audio reference
-                audio_data = event.audio_reference
-                if args.debug:
-                    print(f"Debug - audio_data type: {type(audio_data)}, shape/len: {getattr(audio_data, 'shape', len(audio_data) if hasattr(audio_data, '__len__') else 'unknown')}")
-                
-                result = TranscriptionModule.transcribe_audio(
-                    command_dispatcher,
-                    audio_data=audio_data,
-                    session_id=session_id,
-                    is_first_chunk=True,
-                    is_last_chunk=True
-                )
-                
-                if args.debug:
-                    print(f"Debug - transcription result: {result}")
-                
-                # Print the result directly
-                if result:
-                    # TranscriptionModule.transcribe_audio returns a dictionary with text and other fields,
-                    # but the structure might be nested in a list of results
-                    if isinstance(result, list) and len(result) > 0:
-                        text = result[0].get('text', '')
-                        confidence = result[0].get('confidence', 0.0)
-                        print(f"\n🎤 Final transcription: {text} (confidence: {confidence:.2f})")
-                    elif isinstance(result, dict):
-                        if "text" in result:
-                            # Direct dictionary with text field
-                            print(f"\n🎤 Final transcription: {result['text']} (confidence: {result.get('confidence', 0.0):.2f})")
-                        elif "error" in result:
-                            # Error occurred
-                            print(f"\n❌ Transcription error: {result['error']}")
-                        else:
-                            # Dictionary structure without text field
-                            print(f"\n🎤 Final transcription: {result}")
-                    else:
-                        # Unknown result structure
-                        print(f"\n🎤 Transcription complete: {result}")
-                else:
-                    print("\nNo transcription result returned")
-            except Exception as e:
-                print(f"Error transcribing speech: {e}")
-                if args.debug:
-                    import traceback
-                    traceback.print_exc()
-    
-    # Register our special handler with the event bus
-    event_bus.subscribe(SilenceDetectedEvent, conditional_silence_handler)
+    # Note: The second import of event types and duplicate conditional_silence_handler function 
+    # were removed from here to fix the double logging issue
     
     # Set up event handlers
     def on_vad_status_change(enabled):
@@ -175,6 +348,9 @@ def main():
         """Handle wake word detection events."""
         nonlocal is_wake_word_active, vad_processing_enabled
         
+        # Log wake word detection with technical details
+        logger.info(f"Wake word detected: '{wake_word}' (confidence: {confidence:.2f})")
+        # Print user-friendly output with emoji
         print(f"\n🔊 Wake word detected: '{wake_word}' (confidence: {confidence:.2f})")
         print("Listening for speech... (speak now)")
         
@@ -184,12 +360,13 @@ def main():
         # Enable VAD processing when wake word is detected
         VadModule.enable_processing(command_dispatcher)
         vad_processing_enabled = True
-        debug_print("Explicitly enabled VAD processing after wake word")
+        logger.debug("Explicitly enabled VAD processing after wake word")
     
     def on_wake_word_timeout(wake_word, timeout_duration):
         """Handle wake word timeout events."""
         nonlocal is_wake_word_active, vad_processing_enabled
         
+        logger.info(f"Timed out after {timeout_duration:.1f}s without speech")
         print(f"\n⏱️ Timed out after {timeout_duration:.1f}s without speech")
         print(f"Listening for wake word '{args.wake_words}'...")
         
@@ -199,7 +376,7 @@ def main():
         # Disable VAD processing when timeout occurs
         VadModule.disable_processing(command_dispatcher)
         vad_processing_enabled = False
-        debug_print("Explicitly disabled VAD processing after timeout")
+        logger.debug("Explicitly disabled VAD processing after timeout")
     
     def on_transcription_update(session_id, text, is_final, confidence):
         """Handle transcription update events."""
@@ -214,7 +391,8 @@ def main():
     def on_speech_detected(confidence, timestamp, speech_id):
         """Handle speech detected events, but only log when after wake word."""
         if is_wake_word_active:
-            debug_print(f"Speech detected after wake word with confidence {confidence:.2f}")
+            logger.debug(f"Speech detected after wake word with confidence {confidence:.2f}")
+            # Keep this console output since it's user-facing
             print(f"Speech detected after wake word!")
     
     def on_silence_detected(speech_duration, start_time, end_time, speech_id):
@@ -222,8 +400,11 @@ def main():
         nonlocal is_wake_word_active, vad_processing_enabled
         
         if is_wake_word_active:
-            print(f"Processing speech after wake word (duration: {speech_duration:.2f}s)")
-            debug_print(f"on_silence_detected called, is_wake_word_active: {is_wake_word_active}, speech_id: {speech_id}")
+            # Log technical details but only print in verbose/debug mode
+            logger.info(f"Processing speech after wake word (duration: {speech_duration:.2f}s)")
+            if not is_quiet_mode:
+                print(f"Processing speech after wake word (duration: {speech_duration:.2f}s)")
+            logger.debug(f"on_silence_detected called, is_wake_word_active: {is_wake_word_active}, speech_id: {speech_id}")
             
             # Reset wake word active flag - the handler will take care of processing
             is_wake_word_active = False
@@ -231,7 +412,7 @@ def main():
             # Explicitly disable VAD processing after speech is processed
             VadModule.disable_processing(command_dispatcher)
             vad_processing_enabled = False
-            debug_print("Explicitly disabled VAD processing after speech processing")
+            logger.debug("Explicitly disabled VAD processing after speech processing")
     
     # Subscribe to events
     WakeWordModule.on_wake_word_detected(event_bus, on_wake_word_detected)
@@ -241,16 +422,21 @@ def main():
     VadModule.on_silence_detected(event_bus, on_silence_detected)
     
     # Start audio capture
+    logger.info("Starting audio capture...")
     print("Starting audio capture...")
     AudioCaptureModule.start_recording(command_dispatcher)
     
     # Start wake word detection
+    logger.info(f"Listening for wake word '{args.wake_words}'...")
     print(f"Listening for wake word '{args.wake_words}'...")
     WakeWordModule.start_detection(command_dispatcher)
     
     # Set up signal handler for graceful shutdown
     def signal_handler(sig, frame):
+        logger.info("Shutting down...")
         print("\nShutting down...")
+        # Stop the control server if it's running
+        LoggingModule.stop_control_server()
         WakeWordModule.stop_detection(command_dispatcher)
         AudioCaptureModule.stop_recording(command_dispatcher)
         sys.exit(0)
@@ -261,7 +447,12 @@ def main():
     disabled_result = VadModule.disable_processing(command_dispatcher)
     debug_print(f"Initial VAD disable result: {disabled_result}")
     
-    # Print resource usage status
+    # Log system state information
+    logger.info("Wake word detection active (only wake word processing)")
+    logger.info("VAD processing disabled (will be activated after wake word)")
+    logger.info("System is in low-power mode until wake word is detected")
+    
+    # Print user-friendly messages with emojis
     print(f"👂 Wake word detection active (only wake word processing)")
     print(f"🔊 VAD processing disabled (will be activated after wake word)")
     print(f"💤 System is in low-power mode until wake word is detected")
@@ -274,9 +465,14 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        logger.info("Shutting down...")
         print("\nShutting down...")
+        # Stop the control server if it's running
+        LoggingModule.stop_control_server()
         WakeWordModule.stop_detection(command_dispatcher)
         AudioCaptureModule.stop_recording(command_dispatcher)
+        # Log a final message
+        logger.info("Application terminated")
     
     return 0
 

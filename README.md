@@ -8,6 +8,7 @@ Realtime_mlx_STT is a high-performance speech-to-text transcription library opti
 - **Apple Silicon optimization** using MLX with Neural Engine acceleration
 - **Voice activity detection** using both WebRTC and Silero models
 - **Wake word detection** for hands-free activation using Porcupine
+- **Centralized logging system** with runtime configuration and log rotation
 - **Vertical slice architecture** for modular and maintainable code
 - **Event-driven design** for flexible integration
 - **Thread-safe operations** for responsive applications
@@ -59,6 +60,7 @@ src/
 │   ├── WakeWordDetection/      # Wake word detection
 │   └── RemoteProcessing/       # Remote transcription
 ├── Infrastructure/             # Cross-cutting concerns
+│   └── Logging/                # Centralized logging system
 └── Application/                # Public API facades
 ```
 
@@ -69,6 +71,7 @@ src/
 - **Wake Word Detection**: Recognizes specific trigger phrases to activate the system
 - **Transcription**: Processes audio using MLX-optimized Whisper models
 - **Event System**: Enables loose coupling between components
+- **Logging System**: Provides centralized logging with runtime configuration and log rotation
 
 ## Usage Examples
 
@@ -165,6 +168,41 @@ The repository includes several ready-to-use example scripts:
    python examples/check_audio_devices.py
    ```
 
+7. **Configuring Logging** - The centralized logging system can be used in your applications:
+   ```python
+   # Import the logging module
+   from src.Infrastructure.Logging import LoggingModule, LogLevel
+
+   # Initialize logging with desired configuration
+   LoggingModule.initialize(
+       console_level="INFO",
+       file_enabled=True,
+       file_path="logs/application.log",
+       rotation_enabled=True,
+       feature_levels={
+           "AudioCapture": LogLevel.DEBUG,
+           "Transcription": LogLevel.INFO
+       }
+   )
+
+   # Get a logger for your module
+   logger = LoggingModule.get_logger(__name__)
+   logger.info("Application started")
+   
+   # Enable runtime log level adjustment
+   LoggingModule.start_control_server()
+   
+   # Later, change log levels using the provided utility
+   # python scripts/change_log_level.py AudioCapture DEBUG
+   ```
+
+   You can also use environment variables:
+   ```bash
+   # Set up logging environment
+   source scripts/set_logging_env.sh dev  # For development (verbose)
+   source scripts/set_logging_env.sh prod  # For production
+   ```
+
 ## Testing
 
 The project includes comprehensive tests for each feature:
@@ -175,6 +213,9 @@ python tests/run_tests.py
 
 # Run tests for a specific feature
 python tests/run_tests.py -f VoiceActivityDetection
+
+# Run tests for Infrastructure components
+python tests/run_tests.py -f Infrastructure
 
 # Run a specific test with verbose output
 python tests/run_tests.py -t webrtc_vad_test -v

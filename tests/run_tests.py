@@ -64,13 +64,23 @@ def get_test_suite(feature=None, test_file=None):
                                                   pattern=os.path.basename(test_path))
     
     elif feature:
-        # Run all tests for a specific feature
-        feature_dir = os.path.join(os.path.dirname(__file__), 'Features', feature)
-        if not os.path.exists(feature_dir):
-            print(f"Error: Feature directory {feature} not found")
-            return None
-            
-        return unittest.defaultTestLoader.discover(feature_dir)
+        # Run all tests for a specific feature or infrastructure component
+        if feature.lower() == 'infrastructure' or feature.lower() == 'infra':
+            # Special case for Infrastructure tests
+            infra_dir = os.path.join(os.path.dirname(__file__), 'Infrastructure')
+            if not os.path.exists(infra_dir):
+                print(f"Error: Infrastructure directory not found")
+                return None
+                
+            return unittest.defaultTestLoader.discover(infra_dir)
+        else:
+            # Normal feature test
+            feature_dir = os.path.join(os.path.dirname(__file__), 'Features', feature)
+            if not os.path.exists(feature_dir):
+                print(f"Error: Feature directory {feature} not found")
+                return None
+                
+            return unittest.defaultTestLoader.discover(feature_dir)
     
     else:
         # Run all tests
@@ -79,7 +89,7 @@ def get_test_suite(feature=None, test_file=None):
 
 def main():
     parser = argparse.ArgumentParser(description='Run tests for Realtime_mlx_STT')
-    parser.add_argument('--feature', '-f', help='Specific feature to test (e.g., AudioCapture, VoiceActivityDetection)')
+    parser.add_argument('--feature', '-f', help='Specific feature to test (e.g., AudioCapture, VoiceActivityDetection, Infrastructure)')
     parser.add_argument('--test', '-t', help='Specific test file to run')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
     args = parser.parse_args()
