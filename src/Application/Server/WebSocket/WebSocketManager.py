@@ -9,7 +9,7 @@ from typing import Dict, Any, Set
 import json
 import asyncio
 from fastapi import WebSocket
-from src.Infrastructure.Logging.LoggingModule import get_logger
+from src.Infrastructure.Logging.LoggingModule import LoggingModule
 
 class WebSocketManager:
     """
@@ -22,7 +22,7 @@ class WebSocketManager:
     def __init__(self):
         """Initialize the WebSocket manager."""
         self.active_connections: Set[WebSocket] = set()
-        self.logger = get_logger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
     
     def register(self, websocket: WebSocket):
         """

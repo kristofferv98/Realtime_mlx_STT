@@ -9,7 +9,7 @@ import os
 import json
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field, asdict
-from src.Infrastructure.Logging.LoggingModule import get_logger
+from src.Infrastructure.Logging.LoggingModule import LoggingModule
 
 @dataclass
 class ServerConfig:
@@ -46,7 +46,7 @@ class ServerConfig:
         Returns:
             A ServerConfig instance with values from environment
         """
-        logger = get_logger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         logger.debug("Loading server configuration from environment")
         
         config = cls()
@@ -87,7 +87,7 @@ class ServerConfig:
         Returns:
             A ServerConfig instance with values from the file
         """
-        logger = get_logger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         logger.debug(f"Loading server configuration from file: {path}")
         
         try:
@@ -130,7 +130,7 @@ class ServerConfig:
         Returns:
             True if successful, False otherwise
         """
-        logger = get_logger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         
         try:
             # Create directory if it doesn't exist

@@ -19,7 +19,7 @@ from src.Core.Commands.command_dispatcher import CommandDispatcher
 from src.Core.Events.event_bus import EventBus
 from src.Features.Transcription.Events.TranscriptionUpdatedEvent import TranscriptionUpdatedEvent
 from src.Features.WakeWordDetection.Events.WakeWordDetectedEvent import WakeWordDetectedEvent
-from src.Infrastructure.Logging.LoggingModule import get_logger
+from src.Infrastructure.Logging.LoggingModule import LoggingModule
 
 from .WebSocket.WebSocketManager import WebSocketManager
 from .Configuration.ServerConfig import ServerConfig
@@ -43,7 +43,7 @@ class Server:
             port: The port to bind to
             cors_origins: List of allowed CORS origins
         """
-        self.logger = get_logger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.app = FastAPI(title="Speech-to-Text API")
         self.command_dispatcher = command_dispatcher
         self.event_bus = event_bus
@@ -187,7 +187,7 @@ class ServerModule:
         Returns:
             The server instance
         """
-        logger = get_logger(__name__)
+        logger = LoggingModule.get_logger(__name__)
         logger.info("Registering server module")
         
         if config is None:

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.Core.Commands.command_dispatcher import CommandDispatcher
 from src.Core.Events.event_bus import EventBus
-from src.Infrastructure.Logging.LoggingModule import get_logger
+from src.Infrastructure.Logging.LoggingModule import LoggingModule
 
 class BaseController:
     """
@@ -30,7 +30,7 @@ class BaseController:
             event_bus: Event bus for subscribing to events
             prefix: URL prefix for all routes in this controller
         """
-        self.logger = get_logger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.command_dispatcher = command_dispatcher
         self.event_bus = event_bus
         self.router = APIRouter(prefix=prefix)

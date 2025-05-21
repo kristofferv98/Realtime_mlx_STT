@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body
 
 from src.Core.Commands.command_dispatcher import CommandDispatcher
 from src.Core.Events.event_bus import EventBus
-from src.Infrastructure.Logging.LoggingModule import get_logger
+from src.Infrastructure.Logging.LoggingModule import LoggingModule
 
 from ..Models.SystemModels import (
     ServerStatusResponse,
@@ -45,7 +45,7 @@ class SystemController(BaseController):
             profile_manager: Profile manager for handling configuration profiles
         """
         super().__init__(command_dispatcher, event_bus, prefix="/system")
-        self.logger = get_logger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.profile_manager = profile_manager
         self.start_time = time.time()
         self.active_features = []  # Will be populated as features are activated

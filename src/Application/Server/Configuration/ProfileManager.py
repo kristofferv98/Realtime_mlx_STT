@@ -8,7 +8,7 @@ allowing predefined and custom configurations to be loaded and saved.
 import os
 import json
 from typing import Dict, Any, List, Optional
-from src.Infrastructure.Logging.LoggingModule import get_logger
+from src.Infrastructure.Logging.LoggingModule import LoggingModule
 
 class ProfileManager:
     """
@@ -100,7 +100,7 @@ class ProfileManager:
         Args:
             profiles_directory: Directory to store user profiles
         """
-        self.logger = get_logger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         self.profiles_directory = profiles_directory
         
         # Ensure the profiles directory exists

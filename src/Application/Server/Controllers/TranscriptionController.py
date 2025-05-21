@@ -18,7 +18,7 @@ from src.Features.Transcription.Commands.StartTranscriptionSessionCommand import
 from src.Features.Transcription.Commands.StopTranscriptionSessionCommand import StopTranscriptionSessionCommand
 from src.Features.Transcription.Commands.TranscribeAudioCommand import TranscribeAudioCommand
 from src.Features.Transcription.Events.TranscriptionUpdatedEvent import TranscriptionUpdatedEvent
-from src.Infrastructure.Logging.LoggingModule import get_logger
+from src.Infrastructure.Logging.LoggingModule import LoggingModule
 
 from ..Models.TranscriptionModels import (
     TranscriptionConfigRequest, 
@@ -46,7 +46,7 @@ class TranscriptionController(BaseController):
             event_bus: Event bus for subscribing to events
         """
         super().__init__(command_dispatcher, event_bus, prefix="/transcription")
-        self.logger = get_logger(__name__)
+        self.logger = LoggingModule.get_logger(__name__)
         
         # Track active sessions and current config
         self.active_sessions = set()
