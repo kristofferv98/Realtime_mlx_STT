@@ -114,8 +114,8 @@ def main():
                         help="Hide progress bars from tqdm and huggingface-hub")
     parser.add_argument("--api-key", type=str, default=None,
                         help="OpenAI API key (will check OPENAI_API_KEY env var if not provided)")
-    parser.add_argument("--model", type=str, default="gpt-4o-2024-05-13-audio",
-                        help="OpenAI model to use for transcription")
+    parser.add_argument("--model", type=str, default="gpt-4o-transcribe",
+                        help="OpenAI model to use for transcription (default: gpt-4o-transcribe)")
     
     args = parser.parse_args()
     

@@ -1,8 +1,8 @@
 """
 OpenAITranscriptionEngine implementation for real-time speech-to-text transcription.
 
-This module implements the ITranscriptionEngine interface using OpenAI's GPT-4o-transcribe
-models for cloud-based speech-to-text conversion.
+This module implements the ITranscriptionEngine interface using OpenAI's gpt-4o-transcribe
+model for cloud-based speech-to-text conversion.
 """
 
 import os
@@ -35,7 +35,7 @@ class OpenAITranscriptionEngine(ITranscriptionEngine):
         Initialize the OpenAI transcription engine.
         
         Args:
-            model_name: "gpt-4o-transcribe" or "gpt-4o-mini-transcribe"
+            model_name: The OpenAI model to use for transcription (default: "gpt-4o-transcribe")
             language: Language code or None for auto-detection
             api_key: OpenAI API key (will fall back to env var if None)
             streaming: Whether to use streaming mode
