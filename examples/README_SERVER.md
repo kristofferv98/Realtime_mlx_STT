@@ -205,7 +205,7 @@ Choose from the available transcription models:
 
 ### VAD Configuration
 Voice Activity Detection can be fine-tuned:
-- **Sensitivity** (0.0 - 1.0):
+- **Overall Sensitivity** (0.0 - 1.0):
   - 0.3 - Low sensitivity, good for quiet environments
   - 0.6 - Default, balanced for most situations
   - 0.9 - High sensitivity for noisy environments
@@ -213,6 +213,28 @@ Voice Activity Detection can be fine-tuned:
   - 0.15 - Quick response, may get false positives
   - 0.25 - Default, balanced
   - 0.5+ - Reduces false positives, slower response
+
+#### Advanced VAD Settings (Individual Thresholds)
+For fine-grained control, you can adjust each VAD component separately:
+- **WebRTC Aggressiveness** (0-3):
+  - 0 - Least aggressive (more permissive)
+  - 2 - Default, balanced
+  - 3 - Most aggressive (more restrictive)
+- **Silero Threshold** (0.1-0.9):
+  - 0.1 - Very sensitive (more false positives)
+  - 0.6 - Default, balanced
+  - 0.9 - Very conservative (may miss quiet speech)
+- **WebRTC History Threshold** (0.3-0.9):
+  - Controls the threshold for WebRTC's history buffer
+  - 0.6 - Default, works well for most cases
+
+Example with individual thresholds:
+```javascript
+customConfig.vad.parameters = {
+    webrtc_aggressiveness: 2,
+    silero_threshold: 0.7,
+    webrtc_threshold: 0.5
+}
 
 ## Production Considerations
 

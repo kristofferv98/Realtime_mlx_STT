@@ -205,11 +205,13 @@ class SystemController(BaseController):
                 vad_config = profile_config.get("vad", {})
                 if vad_config:
                     self.logger.info("Configuring VAD...")
+                    vad_params = vad_config.get("parameters", {})
                     self.send_command(ConfigureVadCommand(
                         detector_type=vad_config.get("detector_type", "combined"),
                         sensitivity=vad_config.get("sensitivity", 0.6),
                         window_size=vad_config.get("window_size", 5),
-                        min_speech_duration=vad_config.get("min_speech_duration", 0.25)
+                        min_speech_duration=vad_config.get("min_speech_duration", 0.25),
+                        parameters=vad_params
                     ))
                 
                 # 3. Configure Wake Word if enabled

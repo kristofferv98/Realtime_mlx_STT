@@ -92,9 +92,22 @@ class ConfigureVadCommand(Command):
             config['min_silence_duration_ms'] = self.speech_pad_ms
             
         elif self.detector_type == 'combined':
-            config['webrtc_aggressiveness'] = int(self.sensitivity * 3)  # 0-3 scale
-            config['silero_threshold'] = 0.3 + (self.sensitivity * 0.5)  # 0.3-0.8 scale
-            config['webrtc_threshold'] = 0.6  # Fixed threshold for more sensitive detection
+            # Check if individual thresholds are provided in parameters
+            if 'webrtc_aggressiveness' in self.parameters:
+                config['webrtc_aggressiveness'] = self.parameters['webrtc_aggressiveness']
+            else:
+                config['webrtc_aggressiveness'] = int(self.sensitivity * 3)  # 0-3 scale
+            
+            if 'silero_threshold' in self.parameters:
+                config['silero_threshold'] = self.parameters['silero_threshold']
+            else:
+                config['silero_threshold'] = 0.3 + (self.sensitivity * 0.5)  # 0.3-0.8 scale
+            
+            if 'webrtc_threshold' in self.parameters:
+                config['webrtc_threshold'] = self.parameters['webrtc_threshold']
+            else:
+                config['webrtc_threshold'] = 0.6  # Fixed threshold for more sensitive detection
+            
             config['speech_confirmation_frames'] = max(1, int(self.window_size / 2))
             # Reduce from 3 to 2 frames for faster detection
             if self.parameters.get('faster_detection', True) and config['speech_confirmation_frames'] > 2:

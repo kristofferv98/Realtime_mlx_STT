@@ -190,7 +190,7 @@ class CombinedVadDetector(IVoiceActivityDetector):
                     self.consecutive_speech_frames = 1
                     self.speech_start_time = current_time
                     self._log_state_transition("SILENCE", "POTENTIAL_SPEECH")
-                    self.logger.info(f"WebRTC detected initial speech with confidence {webrtc_confidence:.2f}")
+                    self.logger.debug(f"WebRTC detected initial speech with confidence {webrtc_confidence:.2f}")
                     return False, webrtc_confidence
                 else:
                     # Stay in silence
@@ -219,7 +219,7 @@ class CombinedVadDetector(IVoiceActivityDetector):
                             else:
                                 # Silero rejects: stay in potential speech
                                 self.stats['silero_rejections'] += 1
-                                self.logger.info(f"WebRTC detected speech ({webrtc_confidence:.2f}) but Silero rejected ({silero_confidence:.2f})")
+                                self.logger.debug(f"WebRTC detected speech ({webrtc_confidence:.2f}) but Silero rejected ({silero_confidence:.2f})")
                                 return False, (webrtc_confidence + silero_confidence) / 2
                         else:
                             # No Silero confirmation required
