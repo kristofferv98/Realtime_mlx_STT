@@ -14,7 +14,7 @@ from .event import Event
 from ..Common.Interfaces.event_bus import IEventBus
 
 # Configure logging
-logger = logging.getLogger("realtimestt.core.events")
+logger = logging.getLogger(__name__)
 
 
 class EventBus(IEventBus):

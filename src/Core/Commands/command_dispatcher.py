@@ -14,7 +14,7 @@ from .command import Command
 ICommandHandler = ForwardRef('ICommandHandler')
 
 # Configure logging
-logger = logging.getLogger("realtimestt.core.commands")
+logger = logging.getLogger(__name__)
 
 # Generic type variable for the handler result
 T = TypeVar('T')
