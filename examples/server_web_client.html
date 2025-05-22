@@ -135,21 +135,23 @@
 
         <div class="section">
             <h2>System Control</h2>
-            <div class="controls">
-                <select id="profileSelect">
-                    <option value="continuous-mlx">Continuous MLX</option>
-                    <option value="wake-word-mlx">Wake Word MLX</option>
-                    <option value="wake-word-openai">Wake Word OpenAI</option>
-                </select>
-                <button id="startSystem" class="success">Start System</button>
-                <button id="stopSystem" class="danger" disabled>Stop System</button>
-            </div>
-            <div id="transcriptionStatus" class="status disconnected">System Stopped</div>
-        </div>
-
-        <div class="section">
-            <h2>Configuration</h2>
-            <div class="controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="controls" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                <div>
+                    <label for="modeSelect">Operating Mode:</label>
+                    <select id="modeSelect" style="width: 100%;">
+                        <option value="continuous">Continuous (Always listening)</option>
+                        <option value="vad-triggered" selected>VAD-Triggered (Speech detection)</option>
+                        <option value="wake-word">Wake Word ("Jarvis")</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="modelSelect">Model:</label>
+                    <select id="modelSelect" style="width: 100%;">
+                        <option value="whisper-large-v3-turbo">Whisper Large v3 Turbo (MLX)</option>
+                        <option value="gpt-4o-transcribe">GPT-4o Transcribe (OpenAI)</option>
+                        <option value="gpt-4o-mini-transcribe">GPT-4o Mini Transcribe (OpenAI)</option>
+                    </select>
+                </div>
                 <div>
                     <label for="languageSelect">Language:</label>
                     <select id="languageSelect" style="width: 100%;">
@@ -169,14 +171,20 @@
                         <option value="ko">Korean</option>
                     </select>
                 </div>
-                <div>
-                    <label for="modelSelect">Model:</label>
-                    <select id="modelSelect" style="width: 100%;">
-                        <option value="whisper-large-v3-turbo">Whisper Large v3 Turbo (MLX)</option>
-                        <option value="gpt-4o-transcribe">GPT-4o Transcribe (OpenAI)</option>
-                        <option value="gpt-4o-mini-transcribe">GPT-4o Mini Transcribe (OpenAI)</option>
-                    </select>
-                </div>
+            </div>
+            <div class="controls" style="margin-top: 15px;">
+                <button id="startSystem" class="success">Start System</button>
+                <button id="stopSystem" class="danger" disabled>Stop System</button>
+            </div>
+            <div id="transcriptionStatus" class="status disconnected" style="margin-top: 15px;">System Stopped</div>
+        </div>
+
+        <div class="section">
+            <h2>VAD Configuration</h2>
+            <div class="info" style="margin-bottom: 15px;">
+                <strong>Note:</strong> VAD settings only apply to "VAD-Triggered" and "Wake Word" modes. They are ignored in "Continuous" mode.
+            </div>
+            <div class="controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div>
                     <label for="vadSensitivity">VAD Sensitivity (Overall): <span id="vadValue">0.6</span></label>
                     <input type="range" id="vadSensitivity" min="0" max="1" step="0.1" value="0.6" style="width: 100%;">
@@ -213,9 +221,6 @@
                         </div>
                     </details>
                 </div>
-            </div>
-            <div class="controls" style="margin-top: 15px;">
-                <button id="applyConfig" class="primary">Apply Configuration</button>
             </div>
         </div>
 
@@ -325,9 +330,7 @@
         }
         
         async function startSystem() {
-            const profile = document.getElementById('profileSelect').value;
-            
-            // First apply configuration
+            const mode = document.getElementById('modeSelect').value;
             const language = document.getElementById('languageSelect').value;
             const model = document.getElementById('modelSelect').value;
             const vadSensitivity = parseFloat(document.getElementById('vadSensitivity').value);
@@ -365,8 +368,11 @@
                     };
                 }
                 
-                // For wake word profiles, include wake word config
-                if (profile.includes('wake-word')) {
+                // Override VAD enabled based on mode
+                if (mode === 'continuous') {
+                    customConfig.vad.enabled = false;  // No VAD in continuous mode
+                } else if (mode === 'wake-word') {
+                    // For wake word, include wake word config
                     customConfig.wake_word = {
                         enabled: true,
                         detector: "porcupine",
@@ -374,34 +380,33 @@
                         sensitivity: 0.7,
                         timeout: 30
                     };
-                    // For wake word, VAD should not be initially enabled
-                    customConfig.vad.enabled = false;
                 }
                 
                 const response = await fetch(`${API_BASE}/system/start`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        profile: profile,
+                        profile: mode,
                         custom_config: customConfig
                     })
                 });
                 const data = await response.json();
                 
                 if (data.data && data.data.started) {
-                    log(`Started system with profile: ${profile}`);
+                    log(`Started system with mode: ${mode}`);
                     updateTranscriptionStatus(true);
                     
                     // Update status with configuration details
                     const statusInfo = document.createElement('div');
                     statusInfo.style.cssText = 'font-size: 0.9em; margin-top: 10px; color: #666;';
                     statusInfo.innerHTML = `
-                        <strong>Configuration:</strong><br>
-                        Profile: ${profile}<br>
-                        Language: ${language || 'Auto-detect'}<br>
+                        <strong>Active Configuration:</strong><br>
+                        Mode: ${mode.replace('-', ' ').toUpperCase()}<br>
                         Model: ${model}<br>
-                        VAD Sensitivity: ${vadSensitivity}<br>
-                        Min Speech Duration: ${minSpeechDuration}s<br>
+                        Language: ${language || 'Auto-detect'}<br>
+                        VAD Enabled: ${customConfig.vad.enabled ? 'Yes' : 'No'}<br>
+                        ${customConfig.vad.enabled ? `VAD Sensitivity: ${vadSensitivity}<br>Min Speech Duration: ${minSpeechDuration}s<br>` : ''}
+                        ${useAdvanced && customConfig.vad.enabled ? `WebRTC Aggressiveness: ${customConfig.vad.parameters.webrtc_aggressiveness}<br>Silero Threshold: ${customConfig.vad.parameters.silero_threshold}<br>` : ''}
                         Active Features: ${data.data.active_features ? data.data.active_features.join(', ') : 'N/A'}
                     `;
                     transcriptionStatus.appendChild(statusInfo);
@@ -509,42 +514,6 @@
             log('Sent simulated audio chunk');
         }
         
-        // Configuration functions
-        async function applyConfiguration() {
-            const language = document.getElementById('languageSelect').value;
-            const model = document.getElementById('modelSelect').value;
-            const vadSensitivity = parseFloat(document.getElementById('vadSensitivity').value);
-            const minSpeechDuration = parseFloat(document.getElementById('minSpeechDuration').value);
-            
-            try {
-                // Determine engine type based on model selection
-                const isOpenAI = model.includes('gpt-4o');
-                const engine = isOpenAI ? 'openai' : 'mlx_whisper';
-                
-                // Configure transcription
-                const transcriptionResponse = await fetch(`${API_BASE}/transcription/configure`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        engine_type: engine,
-                        model_name: model,
-                        language: language || null
-                    })
-                });
-                
-                if (!transcriptionResponse.ok) {
-                    throw new Error('Failed to configure transcription');
-                }
-                
-                log('Configuration applied successfully');
-                
-                // Show success message with note about VAD
-                alert('Transcription configuration applied successfully!\n\nNote: VAD settings will be applied when you start the system.');
-            } catch (error) {
-                log(`Failed to apply configuration: ${error.message}`, 'error');
-                alert(`Failed to apply configuration: ${error.message}`);
-            }
-        }
         
         // Update slider labels
         document.getElementById('vadSensitivity').oninput = function() {
@@ -575,7 +544,6 @@
         document.getElementById('connectWS').onclick = connectWebSocket;
         document.getElementById('disconnectWS').onclick = disconnectWebSocket;
         document.getElementById('simulateAudio').onclick = simulateAudio;
-        document.getElementById('applyConfig').onclick = applyConfiguration;
         
         // Initial health check
         checkHealth();

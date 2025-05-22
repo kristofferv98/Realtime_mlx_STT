@@ -115,7 +115,7 @@ class SystemController(BaseController):
             profiles = self.profile_manager.list_profiles()
             return ProfileListResponse(
                 profiles=profiles,
-                default=self.profile_manager.PREDEFINED_PROFILES.get("default", "continuous-mlx")
+                default=self.profile_manager.PREDEFINED_PROFILES.get("default", "vad-triggered")
             )
         
         @self.router.get("/profiles/{name}", response_model=ProfileData)

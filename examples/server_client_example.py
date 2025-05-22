@@ -48,13 +48,13 @@ class ServerClient:
     
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
-        self.ws_url = base_url.replace("http", "ws") + "/ws"
+        self.ws_url = base_url.replace("http", "ws") + "/events"
         self.ws: Optional[websocket.WebSocket] = None
     
     def check_health(self) -> dict:
         """Check server health status."""
         try:
-            response = requests.get(f"{self.base_url}/api/system/health")
+            response = requests.get(f"{self.base_url}/system/status")
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -64,35 +64,36 @@ class ServerClient:
     def get_profiles(self) -> dict:
         """Get available transcription profiles."""
         try:
-            response = requests.get(f"{self.base_url}/api/system/profiles")
+            response = requests.get(f"{self.base_url}/system/profiles")
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to get profiles: {e}")
             return {"error": str(e)}
     
-    def start_transcription(self, profile: str = "balanced", engine: str = "mlx_whisper") -> dict:
-        """Start transcription with specified profile and engine."""
+    def start_system(self, profile: str = "vad-triggered", custom_config: Optional[dict] = None) -> dict:
+        """Start system with specified profile and optional custom configuration."""
         try:
             payload = {
-                "profile": profile,
-                "engine": engine,
-                "options": {}
+                "profile": profile
             }
+            if custom_config:
+                payload["custom_config"] = custom_config
+                
             response = requests.post(
-                f"{self.base_url}/api/transcription/start",
+                f"{self.base_url}/system/start",
                 json=payload
             )
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to start transcription: {e}")
+            logger.error(f"Failed to start system: {e}")
             return {"error": str(e)}
     
-    def stop_transcription(self) -> dict:
-        """Stop current transcription session."""
+    def stop_system(self) -> dict:
+        """Stop the system."""
         try:
-            response = requests.post(f"{self.base_url}/api/transcription/stop")
+            response = requests.post(f"{self.base_url}/system/stop")
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -161,17 +162,27 @@ def demonstrate_rest_api(client: ServerClient):
     profiles = client.get_profiles()
     print(f"   Available profiles: {json.dumps(profiles, indent=2)}")
     
-    # Start transcription
-    print("\n3. Starting transcription...")
-    result = client.start_transcription(profile="balanced", engine="mlx_whisper")
+    # Start system with custom config
+    print("\n3. Starting system with custom configuration...")
+    custom_config = {
+        "transcription": {
+            "engine": "mlx_whisper",
+            "model": "whisper-large-v3-turbo",
+            "language": "no"  # Norwegian
+        },
+        "vad": {
+            "sensitivity": 0.7
+        }
+    }
+    result = client.start_system(profile="vad-triggered", custom_config=custom_config)
     print(f"   Start result: {json.dumps(result, indent=2)}")
     
     # Wait a bit
     time.sleep(2)
     
-    # Stop transcription
-    print("\n4. Stopping transcription...")
-    result = client.stop_transcription()
+    # Stop system
+    print("\n4. Stopping system...")
+    result = client.stop_system()
     print(f"   Stop result: {json.dumps(result, indent=2)}")
 
 

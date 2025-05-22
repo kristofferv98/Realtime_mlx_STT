@@ -105,7 +105,7 @@ def main():
     )
     logger.info(f"Server started on http://{server_config.host}:{server_config.port}")
     logger.info("Use the API endpoints to start transcription with a profile")
-    logger.info("Example: POST /system/start with {'profile': 'continuous-mlx'}")
+    logger.info("Example: POST /system/start with {'profile': 'vad-triggered'}")
     
     # Handle graceful shutdown
     def signal_handler(sig, frame):

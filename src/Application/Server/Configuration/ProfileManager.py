@@ -19,76 +19,54 @@ class ProfileManager:
     """
     
     # Predefined profiles with their configurations
+    # These define operating modes, not specific models
     PREDEFINED_PROFILES = {
-        "continuous-mlx": {
+        "continuous": {
+            "description": "Continuous transcription - always listening",
             "transcription": {
-                "engine": "mlx_whisper",
-                "model": "whisper-large-v3-turbo",
-                "language": None,
                 "auto_start": True
             },
             "vad": {
                 "detector_type": "combined",
                 "sensitivity": 0.6,
-                "enabled": True
+                "enabled": False,  # No VAD filtering in continuous mode
+                "min_speech_duration": 0.25
             },
             "wake_word": {
                 "enabled": False
             }
         },
-        "wake-word-mlx": {
+        "vad-triggered": {
+            "description": "VAD-triggered transcription - only transcribe when speech is detected",
             "transcription": {
-                "engine": "mlx_whisper",
-                "model": "whisper-large-v3-turbo",
-                "language": None,
+                "auto_start": True
+            },
+            "vad": {
+                "detector_type": "combined",
+                "sensitivity": 0.6,
+                "enabled": True,
+                "min_speech_duration": 0.25
+            },
+            "wake_word": {
+                "enabled": False
+            }
+        },
+        "wake-word": {
+            "description": "Wake word activated - say 'jarvis' to start listening",
+            "transcription": {
                 "auto_start": False
             },
             "vad": {
                 "detector_type": "combined",
                 "sensitivity": 0.6,
-                "enabled": True
+                "enabled": True,
+                "min_speech_duration": 0.25
             },
             "wake_word": {
                 "enabled": True,
                 "words": ["jarvis"],
-                "sensitivity": 0.7
-            }
-        },
-        "wake-word-openai": {
-            "transcription": {
-                "engine": "openai",
-                "model": "gpt-4o-transcribe",
-                "language": None,
-                "auto_start": False
-            },
-            "vad": {
-                "detector_type": "combined",
-                "sensitivity": 0.6,
-                "enabled": True
-            },
-            "wake_word": {
-                "enabled": True,
-                "words": ["jarvis"],
-                "sensitivity": 0.7
-            }
-        },
-        "wake-word-clipboard": {
-            "transcription": {
-                "engine": "mlx_whisper",
-                "model": "whisper-large-v3-turbo",
-                "language": None,
-                "auto_start": False,
-                "auto_clipboard": True
-            },
-            "vad": {
-                "detector_type": "combined",
-                "sensitivity": 0.6,
-                "enabled": True
-            },
-            "wake_word": {
-                "enabled": True,
-                "words": ["jarvis"],
-                "sensitivity": 0.7
+                "sensitivity": 0.7,
+                "timeout": 30
             }
         }
     }

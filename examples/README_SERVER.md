@@ -102,7 +102,7 @@ curl http://localhost:8000/system/profiles
 curl -X POST http://localhost:8000/system/start \
   -H "Content-Type: application/json" \
   -d '{
-    "profile": "continuous-mlx"
+    "profile": "vad-triggered"
   }'
 ```
 
@@ -111,11 +111,12 @@ curl -X POST http://localhost:8000/system/start \
 curl -X POST http://localhost:8000/system/start \
   -H "Content-Type: application/json" \
   -d '{
-    "profile": "continuous-mlx",
+    "profile": "vad-triggered",
     "custom_config": {
       "transcription": {
-        "language": "es",
-        "model": "whisper-large-v3-turbo"
+        "engine": "mlx_whisper",
+        "model": "whisper-large-v3-turbo",
+        "language": "no"
       },
       "vad": {
         "sensitivity": 0.8,
@@ -235,6 +236,7 @@ customConfig.vad.parameters = {
     silero_threshold: 0.7,
     webrtc_threshold: 0.5
 }
+```
 
 ## Production Considerations
 
