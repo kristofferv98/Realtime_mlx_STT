@@ -19,11 +19,11 @@ logging.basicConfig(
 
 # Import test modules
 try:
-    # Will be implemented in the future
-    from tests.Features.WakeWordDetection.porcupine_detector_test import PorcupineDetectorTest
-    from tests.Features.WakeWordDetection.wake_word_handler_test import WakeWordHandlerTest
-except ImportError:
-    print("One or more test modules could not be imported. Some tests will be skipped.")
+    from tests.Features.WakeWordDetection.porcupine_detector_test import TestPorcupineWakeWordDetector
+    from tests.Features.WakeWordDetection.wake_word_handler_test import TestWakeWordCommandHandler
+except ImportError as e:
+    print(f"One or more test modules could not be imported: {e}")
+    print("Some tests will be skipped.")
 
 
 if __name__ == "__main__":
@@ -33,9 +33,21 @@ if __name__ == "__main__":
     # Add tests to the suite
     loader = unittest.TestLoader()
     
-    # Add all the test cases
-    # for test_case in [PorcupineDetectorTest, WakeWordHandlerTest]:
-    #     suite.addTests(loader.loadTestsFromTestCase(test_case))
+    # Add all the test cases if they were imported successfully
+    test_cases = []
+    
+    try:
+        test_cases.append(TestPorcupineWakeWordDetector)
+    except NameError:
+        print("TestPorcupineWakeWordDetector could not be imported")
+        
+    try:
+        test_cases.append(TestWakeWordCommandHandler)
+    except NameError:
+        print("TestWakeWordCommandHandler could not be imported")
+    
+    for test_case in test_cases:
+        suite.addTests(loader.loadTestsFromTestCase(test_case))
     
     # Run the tests
     runner = unittest.TextTestRunner(verbosity=2)

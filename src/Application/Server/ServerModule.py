@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any, List
 import threading
 import logging
 import os
+import asyncio
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -100,6 +101,14 @@ class Server:
             """Handle WebSocket connections."""
             await websocket.accept()
             self.websocket_manager.register(websocket)
+            
+            # Set the event loop for the WebSocket manager if not already set
+            try:
+                loop = asyncio.get_running_loop()
+                self.websocket_manager.set_event_loop(loop)
+            except:
+                pass
+            
             try:
                 while True:
                     data = await websocket.receive_json()

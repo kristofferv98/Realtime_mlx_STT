@@ -16,6 +16,30 @@ from src.Core.Commands.command_dispatcher import CommandDispatcher
 from src.Core.Events.event_bus import EventBus
 from src.Infrastructure.Logging.LoggingModule import LoggingModule
 
+# Import necessary commands and modules
+from src.Features.AudioCapture import AudioCaptureModule
+from src.Features.AudioCapture.Commands.StartRecordingCommand import StartRecordingCommand
+from src.Features.AudioCapture.Commands.StopRecordingCommand import StopRecordingCommand
+from src.Features.VoiceActivityDetection import VadModule
+from src.Features.VoiceActivityDetection.Commands.EnableVadProcessingCommand import EnableVadProcessingCommand
+from src.Features.VoiceActivityDetection.Commands.DisableVadProcessingCommand import DisableVadProcessingCommand
+from src.Features.VoiceActivityDetection.Commands.ConfigureVadCommand import ConfigureVadCommand
+from src.Features.Transcription.Commands.ConfigureTranscriptionCommand import ConfigureTranscriptionCommand
+from src.Features.Transcription.Commands.StartTranscriptionSessionCommand import StartTranscriptionSessionCommand
+from src.Features.Transcription.Commands.StopTranscriptionSessionCommand import StopTranscriptionSessionCommand
+from src.Features.WakeWordDetection.Commands.StartWakeWordDetectionCommand import StartWakeWordDetectionCommand
+from src.Features.WakeWordDetection.Commands.StopWakeWordDetectionCommand import StopWakeWordDetectionCommand
+from src.Features.WakeWordDetection.Commands.ConfigureWakeWordCommand import ConfigureWakeWordCommand
+from src.Features.VoiceActivityDetection.Commands.ConfigureVadCommand import ConfigureVadCommand
+from src.Features.VoiceActivityDetection.Commands.EnableVadProcessingCommand import EnableVadProcessingCommand
+from src.Features.VoiceActivityDetection.Commands.DisableVadProcessingCommand import DisableVadProcessingCommand
+from src.Features.Transcription.Commands.ConfigureTranscriptionCommand import ConfigureTranscriptionCommand
+from src.Features.Transcription.Commands.StartTranscriptionSessionCommand import StartTranscriptionSessionCommand
+from src.Features.Transcription.Commands.StopTranscriptionSessionCommand import StopTranscriptionSessionCommand
+from src.Features.WakeWordDetection.Commands.ConfigureWakeWordCommand import ConfigureWakeWordCommand
+from src.Features.WakeWordDetection.Commands.StartWakeWordDetectionCommand import StartWakeWordDetectionCommand
+from src.Features.WakeWordDetection.Commands.StopWakeWordDetectionCommand import StopWakeWordDetectionCommand
+
 from ..Models.SystemModels import (
     ServerStatusResponse,
     ProfileRequest,
@@ -50,6 +74,9 @@ class SystemController(BaseController):
         self.start_time = time.time()
         self.active_features = []  # Will be populated as features are activated
         self.version = "0.1.0"  # TODO: Get this from a central version file
+        self.current_profile = None
+        self.system_running = False
+        self.active_session_id = None
     
     def _register_routes(self):
         """Register routes for this controller."""
@@ -149,20 +176,106 @@ class SystemController(BaseController):
                     detail=f"Profile not found: {request.profile}"
                 )
             
+            # Merge custom configuration with profile if provided
+            if request.custom_config:
+                self.logger.info(f"Applying custom configuration: {request.custom_config}")
+                profile_config = self._merge_configurations(profile_config, request.custom_config)
+            
             # Apply the configuration
             try:
-                # TODO: Implement actual configuration application
-                # This would dispatch commands to configure and start the different components
+                # Stop any existing system first
+                if self.system_running:
+                    await self._stop_system_internal()
                 
-                # For now, just log and return success
-                self.logger.info(f"Applied configuration from profile: {request.profile}")
+                # Apply profile configuration
+                self.logger.info(f"Applying configuration from profile: {request.profile}")
+                
+                # 1. Configure Transcription
+                transcription_config = profile_config.get("transcription", {})
+                if transcription_config:
+                    self.logger.info("Configuring transcription...")
+                    self.send_command(ConfigureTranscriptionCommand(
+                        engine_type=transcription_config.get("engine", "mlx_whisper"),
+                        model_name=transcription_config.get("model", "whisper-large-v3-turbo"),
+                        language=transcription_config.get("language"),
+                        options=transcription_config.get("options", {})
+                    ))
+                
+                # 2. Configure VAD
+                vad_config = profile_config.get("vad", {})
+                if vad_config:
+                    self.logger.info("Configuring VAD...")
+                    self.send_command(ConfigureVadCommand(
+                        detector_type=vad_config.get("detector_type", "combined"),
+                        sensitivity=vad_config.get("sensitivity", 0.6),
+                        window_size=vad_config.get("window_size", 5),
+                        min_speech_duration=vad_config.get("min_speech_duration", 0.25)
+                    ))
+                
+                # 3. Configure Wake Word if enabled
+                wake_word_config = profile_config.get("wake_word", {})
+                if wake_word_config.get("enabled", False):
+                    self.logger.info("Configuring wake word detection...")
+                    self.send_command(ConfigureWakeWordCommand(
+                        wake_words=wake_word_config.get("words", ["jarvis"]),
+                        sensitivity=wake_word_config.get("sensitivity", 0.7),
+                        timeout_seconds=wake_word_config.get("timeout", 30)
+                    ))
+                
+                # 4. Start audio recording
+                self.logger.info("Starting audio recording...")
+                self.send_command(StartRecordingCommand(
+                    device_id=None,  # Use default device
+                    sample_rate=16000,
+                    chunk_size=512  # Optimal for Silero VAD
+                ))
+                
+                # 5. Enable/configure VAD processing based on profile
+                if vad_config.get("enabled", True):
+                    if not wake_word_config.get("enabled", False):
+                        # For continuous transcription, enable VAD immediately
+                        self.logger.info("Enabling VAD processing...")
+                        self.send_command(EnableVadProcessingCommand())
+                    else:
+                        # For wake word mode, VAD will be enabled after wake word detection
+                        self.logger.info("VAD processing will be enabled after wake word detection")
+                
+                # 6. Start transcription session if auto_start is enabled
+                if transcription_config.get("auto_start", False):
+                    import uuid
+                    self.active_session_id = str(uuid.uuid4())
+                    self.logger.info(f"Starting transcription session: {self.active_session_id}")
+                    self.send_command(StartTranscriptionSessionCommand(
+                        session_id=self.active_session_id
+                    ))
+                
+                # 7. Start wake word detection if enabled
+                if wake_word_config.get("enabled", False):
+                    self.logger.info("Starting wake word detection...")
+                    self.send_command(StartWakeWordDetectionCommand())
+                
+                # Update system state
+                self.system_running = True
+                self.current_profile = request.profile
+                self.active_features = self._get_active_features(profile_config)
+                
+                self.logger.info(f"System started successfully with profile: {request.profile}")
                 return self.create_standard_response(
-                    data={"started": True, "profile": request.profile},
+                    data={
+                        "started": True, 
+                        "profile": request.profile,
+                        "active_features": self.active_features
+                    },
                     message=f"System started with profile: {request.profile}"
                 )
                 
             except Exception as e:
                 self.logger.error(f"Error starting system: {e}")
+                # Try to clean up on error
+                try:
+                    await self._stop_system_internal()
+                except:
+                    pass
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Error starting system: {str(e)}"
@@ -173,13 +286,19 @@ class SystemController(BaseController):
             """Stop the system."""
             self.logger.info("Stopping system")
             
-            # TODO: Implement actual system shutdown
-            # This would dispatch commands to stop the different components
-            
-            return self.create_standard_response(
-                data={"stopped": True},
-                message="System stopped"
-            )
+            try:
+                await self._stop_system_internal()
+                
+                return self.create_standard_response(
+                    data={"stopped": True},
+                    message="System stopped"
+                )
+            except Exception as e:
+                self.logger.error(f"Error stopping system: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Error stopping system: {str(e)}"
+                )
         
         @self.router.post("/config", response_model=Dict[str, Any])
         async def update_config(config: GeneralConfigRequest = Body(...)):
@@ -193,3 +312,92 @@ class SystemController(BaseController):
                 data={"updated": True},
                 message="System configuration updated"
             )
+    
+    async def _stop_system_internal(self):
+        """Internal method to stop all system components."""
+        self.logger.info("Stopping all system components...")
+        
+        try:
+            # 1. Stop wake word detection if active
+            if "wake_word_detection" in self.active_features:
+                self.logger.info("Stopping wake word detection...")
+                self.send_command(StopWakeWordDetectionCommand())
+            
+            # 2. Stop transcription session if active
+            if self.active_session_id:
+                self.logger.info(f"Stopping transcription session: {self.active_session_id}")
+                self.send_command(StopTranscriptionSessionCommand(
+                    session_id=self.active_session_id
+                ))
+                self.active_session_id = None
+            
+            # 3. Disable VAD processing
+            self.logger.info("Disabling VAD processing...")
+            self.send_command(DisableVadProcessingCommand())
+            
+            # 4. Stop audio recording
+            self.logger.info("Stopping audio recording...")
+            self.send_command(StopRecordingCommand())
+            
+            # Update system state
+            self.system_running = False
+            self.current_profile = None
+            self.active_features = []
+            
+            self.logger.info("All system components stopped")
+            
+        except Exception as e:
+            self.logger.error(f"Error during system shutdown: {e}")
+            # Still mark system as stopped even if there were errors
+            self.system_running = False
+            raise
+    
+    def _get_active_features(self, profile_config: Dict[str, Any]) -> List[str]:
+        """Determine which features are active based on profile configuration."""
+        features = []
+        
+        # Always include audio capture if we're starting the system
+        features.append("audio_capture")
+        
+        # Check VAD
+        if profile_config.get("vad", {}).get("enabled", True):
+            features.append("voice_activity_detection")
+        
+        # Check Wake Word
+        if profile_config.get("wake_word", {}).get("enabled", False):
+            features.append("wake_word_detection")
+        
+        # Check Transcription
+        if profile_config.get("transcription", {}):
+            features.append("transcription")
+        
+        return features
+    
+    def _merge_configurations(self, base_config: Dict[str, Any], custom_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Merge custom configuration with base profile configuration.
+        
+        Custom configuration takes precedence over base configuration.
+        """
+        import copy
+        merged = copy.deepcopy(base_config)
+        
+        # Handle transcription configuration
+        if "transcription" in custom_config:
+            if "transcription" not in merged:
+                merged["transcription"] = {}
+            merged["transcription"].update(custom_config["transcription"])
+        
+        # Handle VAD configuration
+        if "vad" in custom_config:
+            if "vad" not in merged:
+                merged["vad"] = {}
+            merged["vad"].update(custom_config["vad"])
+        
+        # Handle wake word configuration
+        if "wake_word" in custom_config:
+            if "wake_word" not in merged:
+                merged["wake_word"] = {}
+            merged["wake_word"].update(custom_config["wake_word"])
+        
+        return merged

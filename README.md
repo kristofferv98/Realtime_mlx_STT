@@ -30,22 +30,27 @@ Realtime_mlx_STT is a high-performance speech-to-text transcription library opti
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/Realtime_mlx_STT.git
+git clone https://github.com/kristofferv98/Realtime_mlx_STT.git
 cd Realtime_mlx_STT
 
-# Set up Python environment (recommended to use version 3.11)
-python -m venv env
-source env/bin/activate
+# Set up Python environment (requires Python 3.8+ but 3.11+ recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install with uv using pyproject.toml
-uv pip install -e .
+# Install with pip using pyproject.toml (setup.py has been removed)
+pip install -e .
 
 # For development, include dev dependencies
-uv pip install -e ".[dev]"
+pip install -e ".[dev]"
 
-# For wake word detection
-uv pip install -e ".[wakeword]"
+# For OpenAI transcription support
+pip install -e ".[openai]"
+
+# For clipboard/auto-typing features
+pip install -e ".[clipboard]"
 ```
+
+> **Note**: The project uses `pyproject.toml` as the single source of truth for dependencies. The old `setup.py` has been removed to avoid configuration conflicts.
 
 ## Architecture
 
@@ -122,16 +127,20 @@ transcriber.cleanup()
 
 ```python
 # Server-side (run in a separate process)
-from src.Application.Server.ServerModule import ServerModule
+from src.Application import ServerModule
 from src.Core.Commands.command_dispatcher import CommandDispatcher
 from src.Core.Events.event_bus import EventBus
+from src.Features import AudioCaptureModule, TranscriptionModule, VadModule, WakeWordModule
 
 # Create command dispatcher and event bus
 command_dispatcher = CommandDispatcher()
 event_bus = EventBus()
 
-# Register all modules with command dispatcher and event bus
-# (Audio, VAD, Transcription, WakeWord modules would be registered here)
+# Register all feature modules
+AudioCaptureModule.register(command_dispatcher, event_bus)
+VadModule.register(command_dispatcher, event_bus)
+TranscriptionModule.register(command_dispatcher, event_bus)
+WakeWordModule.register(command_dispatcher, event_bus)
 
 # Start the server (default: http://127.0.0.1:8080)
 server = ServerModule.register(command_dispatcher, event_bus)
@@ -327,6 +336,16 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+## Recent Updates (January 2025)
+
+- **Configuration Cleanup**: Migrated to `pyproject.toml` as the single source of truth for dependencies
+- **Architecture Improvements**: Added proper exports to `__init__.py` files for better import ergonomics
+- **Code Quality**: Fixed thread safety issues and improved error handling
+- **Consistency**: All features now follow the same structure (Commands, Events, Handlers, Models)
+- **Removed Stubs**: Cleaned up empty directories and placeholder features
+
+For detailed changes, see `specs/cleanup_implementation_summary.md`.
 
 ## License
 

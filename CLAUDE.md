@@ -3,8 +3,9 @@
 ## CRITICAL DIRECTIVES
 - **ALWAYS** follow vertical slice architecture for all code changes.
 - **ALWAYS** implement features within `src/Features/` with `Commands/`, `Events/`, `Handlers/`, and `Models/` subdirectories. Infrastructure components (like Logging) reside in `src/Infrastructure/`.
-- **ALWAYS** use `uv sync pyproject.toml` for dependency management.
+- **ALWAYS** use `pip install -e .` or `uv pip install -e .` for dependency management (pyproject.toml is the single source of truth, setup.py has been removed).
 - **ALWAYS** implement interfaces defined in `Core/` when creating feature components.
+- **ALWAYS** use proper imports from populated `__init__.py` files (e.g., `from src.Features import TranscriptionModule`).
 
 ## CODE PATTERNS
 - Command objects define actions to be performed.
@@ -15,11 +16,12 @@
 - All audio processing at 16kHz, 16-bit, mono format.
 
 ## IMPLEMENTATION GUIDELINES
-- AudioCapture, VoiceActivityDetection, WakeWordDetection Transcription features are COMPLETED.
+- AudioCapture, VoiceActivityDetection, WakeWordDetection, Transcription features are COMPLETED.
 - MLX optimizations are REQUIRED for all transcription code running on Apple Silicon.
 - Type hints MUST be used throughout all new code.
-- Tests MUST be written for all new functionality.
-- **ALWAYS** use `src.Infrastructure.Logging.LoggingModule.get_logger(__name__)` for acquiring loggers to ensure standardized namespaces and centralized control as defined in `specs/logging_design.md`.
+- Tests MUST be written for all new functionality (Note: WakeWordDetection tests need implementation).
+- **ALWAYS** use `LoggingModule.get_logger(__name__)` for acquiring loggers (not hardcoded names).
+- Thread cleanup is critical - use non-daemon threads and proper cleanup methods.
 
 ## TECHNICAL CONSTRAINTS
 - Target platform is Apple Silicon (macOS).

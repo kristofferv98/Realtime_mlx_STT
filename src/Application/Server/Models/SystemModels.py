@@ -21,6 +21,7 @@ class ProfileRequest(BaseModel):
     """Request to start the system with a specific profile."""
     
     profile: str = Field(..., description="Name of the profile to use")
+    custom_config: Optional[Dict[str, Any]] = Field(None, description="Custom configuration to merge with profile")
 
 class ProfileListResponse(BaseModel):
     """Response containing available profiles."""

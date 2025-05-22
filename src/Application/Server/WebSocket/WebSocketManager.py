@@ -5,9 +5,10 @@ This module provides WebSocket connection management and event broadcasting
 for the server, enabling real-time communication with clients.
 """
 
-from typing import Dict, Any, Set
+from typing import Dict, Any, Set, Optional
 import json
 import asyncio
+import threading
 from fastapi import WebSocket
 from src.Infrastructure.Logging.LoggingModule import LoggingModule
 
@@ -23,6 +24,8 @@ class WebSocketManager:
         """Initialize the WebSocket manager."""
         self.active_connections: Set[WebSocket] = set()
         self.logger = LoggingModule.get_logger(__name__)
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._broadcast_queue: asyncio.Queue = None
     
     def register(self, websocket: WebSocket):
         """
@@ -79,12 +82,22 @@ class WebSocketManager:
         for connection in disconnected:
             self.unregister(connection)
     
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop):
+        """
+        Set the event loop for thread-safe broadcasting.
+        
+        Args:
+            loop: The asyncio event loop from the main thread
+        """
+        self._loop = loop
+        self.logger.debug("Event loop set for WebSocket manager")
+    
     def broadcast_event(self, event_type: str, data: Dict[str, Any]):
         """
         Broadcast an event to all connected clients.
         
-        This method creates a task to handle the broadcast asynchronously
-        since it might be called from synchronous event handlers.
+        This method handles broadcasting from any thread by using
+        asyncio.run_coroutine_threadsafe when called from a different thread.
         
         Args:
             event_type: The type of event
@@ -97,11 +110,18 @@ class WebSocketManager:
         
         self.logger.debug(f"Broadcasting event: {event_type}")
         
-        # Create a task to broadcast the message asynchronously
-        # This approach allows broadcasting from synchronous code
+        # Try to get the current event loop
         try:
-            loop = asyncio.get_event_loop()
-            loop.create_task(self._broadcast(message))
+            current_loop = asyncio.get_running_loop()
+            # We're in an async context, create task directly
+            current_loop.create_task(self._broadcast(message))
         except RuntimeError:
-            # If there's no event loop (e.g., in a thread), log the error
-            self.logger.error("Cannot broadcast message: No event loop running")
+            # We're not in an async context (different thread)
+            if self._loop and self._loop.is_running():
+                # Use thread-safe method to schedule the coroutine
+                asyncio.run_coroutine_threadsafe(
+                    self._broadcast(message),
+                    self._loop
+                )
+            else:
+                self.logger.error("Cannot broadcast message: No event loop available")

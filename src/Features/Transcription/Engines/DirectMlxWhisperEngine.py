@@ -1040,6 +1040,7 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                 self.result_queue.put(transcription_result)
             
             self.logger.info(f"Processed audio in {processing_time:.2f}s, text length: {len(result)}")
+            self.logger.info(f"TRANSCRIPTION: {result}")
                 
         except Exception as e:
             self.logger.error(f"Error processing audio: {e}", exc_info=True)
