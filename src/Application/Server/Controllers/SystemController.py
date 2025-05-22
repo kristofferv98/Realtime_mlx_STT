@@ -218,10 +218,21 @@ class SystemController(BaseController):
                 wake_word_config = profile_config.get("wake_word", {})
                 if wake_word_config.get("enabled", False):
                     self.logger.info("Configuring wake word detection...")
+                    wake_words = wake_word_config.get("words", ["jarvis"])
+                    sensitivity = wake_word_config.get("sensitivity", 0.7)
+                    # Create sensitivities list with same sensitivity for all wake words
+                    sensitivities = [sensitivity] * len(wake_words)
+                    
+                    # Create WakeWordConfig with proper parameters
+                    from src.Features.WakeWordDetection.Models.WakeWordConfig import WakeWordConfig
+                    config = WakeWordConfig(
+                        wake_words=wake_words,
+                        sensitivities=sensitivities,
+                        speech_timeout=wake_word_config.get("timeout", 30)
+                    )
+                    
                     self.send_command(ConfigureWakeWordCommand(
-                        wake_words=wake_word_config.get("words", ["jarvis"]),
-                        sensitivity=wake_word_config.get("sensitivity", 0.7),
-                        timeout_seconds=wake_word_config.get("timeout", 30)
+                        config=config
                     ))
                 
                 # 4. Start audio recording

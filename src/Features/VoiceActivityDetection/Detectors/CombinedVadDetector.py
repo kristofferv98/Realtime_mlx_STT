@@ -87,10 +87,16 @@ class CombinedVadDetector(IVoiceActivityDetector):
             speech_threshold=webrtc_threshold
         )
         
+        # Calculate window size ensuring minimum of 512 samples for Silero
+        window_size_samples = int(sample_rate * frame_duration_ms / 1000)
+        if window_size_samples < 512:
+            self.logger.warning(f"Calculated window size {window_size_samples} is too small for Silero VAD (minimum 512), adjusting to 512")
+            window_size_samples = 512
+        
         self.silero_detector = SileroVadDetector(
             threshold=silero_threshold,
             sample_rate=sample_rate,
-            window_size_samples=int(sample_rate * frame_duration_ms / 1000)
+            window_size_samples=window_size_samples
         )
         
         # State tracking
@@ -333,7 +339,13 @@ class CombinedVadDetector(IVoiceActivityDetector):
                 frame_duration_ms = config['frame_duration_ms']
                 self.frame_duration_ms = frame_duration_ms
                 webrtc_config['frame_duration_ms'] = frame_duration_ms
-                silero_config['window_size_samples'] = int(self.sample_rate * frame_duration_ms / 1000)
+                
+                # Calculate window size ensuring minimum of 512 samples for Silero
+                window_size_samples = int(self.sample_rate * frame_duration_ms / 1000)
+                if window_size_samples < 512:
+                    self.logger.warning(f"Calculated window size {window_size_samples} is too small for Silero VAD (minimum 512), adjusting to 512")
+                    window_size_samples = 512
+                silero_config['window_size_samples'] = window_size_samples
             
             # State machine configurations
             if 'speech_confirmation_frames' in config:

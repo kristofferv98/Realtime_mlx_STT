@@ -2,7 +2,16 @@
 
 ## Overview
 
-The Transcription feature provides high-performance speech-to-text capabilities optimized for Apple Silicon. It converts audio data into text using the MLX-optimized Whisper large-v3-turbo model, supporting both batch processing for accuracy and streaming for real-time applications. The feature uses process isolation for stability, provides a robust event system for notifications, and offers a clean command-based API for integration.
+The Transcription feature provides high-performance speech-to-text capabilities optimized for Apple Silicon. It supports both MLX-optimized models and OpenAI's transcription API, with batch processing for accuracy and streaming for real-time applications. The feature provides a robust event system for notifications and offers a clean command-based API for integration.
+
+### Supported Models
+
+- **MLX Engine** (`engine_type: "mlx_whisper"`):
+  - `whisper-large-v3-turbo` - MLX-optimized Whisper model for Apple Silicon
+
+- **OpenAI Engine** (`engine_type: "openai"`):
+  - `gpt-4o-transcribe` - OpenAI's GPT-4o transcription model
+  - `gpt-4o-mini-transcribe` - OpenAI's GPT-4o-mini transcription model
 
 ## Directory Structure
 
@@ -65,8 +74,8 @@ Configures the behavior of transcription engines and sessions.
 ```python
 @dataclass
 class TranscriptionConfig:
-    engine_type: str = "mlx_whisper"      # Engine selection
-    model_name: str = "whisper-large-v3-turbo"  # Model to use
+    engine_type: str = "mlx_whisper"      # Engine selection (mlx_whisper or openai)
+    model_name: str = "whisper-large-v3-turbo"  # Model to use (see supported models below)
     language: Optional[str] = None        # Language code or None for auto
     compute_type: Literal["default", "float16", "float32"] = "float16"  # Precision
     beam_size: int = 1                    # Beam search size
@@ -386,7 +395,7 @@ TranscriptionModule.configure(
     command_dispatcher=command_dispatcher,
     engine_type="mlx_whisper",
     model_name="whisper-large-v3-turbo",
-    language="en",  # Set to English
+    language="en",  # Set to English (supports 'no' for Norwegian)
     streaming=True,
     chunk_duration_ms=1200,  # Larger chunks for better context
     chunk_overlap_ms=300,    # More overlap for better continuity
@@ -467,7 +476,7 @@ TranscriptionModule.stop_session(
 result = TranscriptionModule.transcribe_file(
     command_dispatcher=command_dispatcher,
     file_path="speech_sample.wav",
-    language=None,  # Auto-detect language
+    language=None,  # Auto-detect language (or use 'no' for Norwegian)
     streaming=False  # Use batch mode for better accuracy
 )
 
@@ -571,6 +580,46 @@ TranscriptionModule.on_transcription_updated(event_bus, on_transcription_updated
 
 # Start audio capture
 AudioCaptureModule.start_recording(command_dispatcher)
+```
+
+### OpenAI Engine Configuration
+
+For OpenAI models, you'll need to set your API key:
+
+```python
+# Configure for OpenAI GPT-4o
+TranscriptionModule.configure(
+    command_dispatcher=command_dispatcher,
+    engine_type="openai",
+    model_name="gpt-4o-transcribe",  # Or "gpt-4o-mini-transcribe"
+    language="no",  # Norwegian (or "en" for English)
+    options={
+        "api_key": "your-openai-api-key",  # Or set OPENAI_API_KEY env var
+        "temperature": 0.2,  # Lower temperature for more consistent results
+    }
+)
+```
+
+### Language Support Examples
+
+```python
+# Norwegian transcription with MLX
+TranscriptionModule.configure(
+    command_dispatcher=command_dispatcher,
+    engine_type="mlx_whisper",
+    model_name="whisper-large-v3-turbo",
+    language="no",  # Norwegian
+    streaming=True
+)
+
+# Norwegian transcription with OpenAI
+TranscriptionModule.configure(
+    command_dispatcher=command_dispatcher,
+    engine_type="openai",
+    model_name="gpt-4o-transcribe",
+    language="no",  # Norwegian
+    options={"api_key": "your-api-key"}
+)
 ```
 
 ## Advanced Features

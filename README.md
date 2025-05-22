@@ -6,9 +6,11 @@ Realtime_mlx_STT is a high-performance speech-to-text transcription library opti
 
 - **Real-time transcription** with low latency for macOS applications
 - **Apple Silicon optimization** using MLX with Neural Engine acceleration
-- **Voice activity detection** using both WebRTC and Silero models
+- **Voice activity detection** using both WebRTC and Silero models with full configurability
 - **Wake word detection** for hands-free activation using Porcupine
 - **Server/Client architecture** with HTTP API and WebSocket support
+- **Web UI** with comprehensive configuration controls for all parameters
+- **Lazy initialization** for optimal resource usage
 - **Centralized logging system** with runtime configuration and log rotation
 - **Vertical slice architecture** for modular and maintainable code
 - **Event-driven design** for flexible integration
@@ -81,9 +83,15 @@ src/
 
 - **Audio Capture**: Handles microphone input and audio file processing
 - **Voice Activity Detection**: Detects speech using WebRTC, Silero, or combined approaches
+  - Lazy initialization for optimal resource usage
+  - Full configurability of all parameters (thresholds, frame settings, buffers)
+  - Individual control over each VAD component
 - **Wake Word Detection**: Recognizes specific trigger phrases to activate the system
-- **Transcription**: Processes audio using MLX-optimized Whisper models
+- **Transcription**: Processes audio using MLX-optimized Whisper models or OpenAI API
 - **Server**: FastAPI-based HTTP and WebSocket server for remote access
+  - Web UI with comprehensive configuration controls
+  - Real-time transcription display
+  - Support for custom configuration overrides
 - **Client Library**: Python client for interacting with the server
 - **Event System**: Enables loose coupling between components
 - **Logging System**: Provides centralized logging with runtime configuration and log rotation
@@ -142,7 +150,7 @@ VadModule.register(command_dispatcher, event_bus)
 TranscriptionModule.register(command_dispatcher, event_bus)
 WakeWordModule.register(command_dispatcher, event_bus)
 
-# Start the server (default: http://127.0.0.1:8080)
+# Start the server (default: http://127.0.0.1:8000)
 server = ServerModule.register(command_dispatcher, event_bus)
 
 # Client-side (in another process or machine)
@@ -151,17 +159,29 @@ import websocket
 import json
 import threading
 
-# Configure transcription
-requests.post("http://localhost:8080/transcription/configure", 
+# Start system with profile and custom configuration
+response = requests.post("http://localhost:8000/system/start", 
     json={
-        "engine_type": "mlx_whisper",
-        "model_name": "whisper-large-v3-turbo",
-        "language": "en"
+        "profile": "vad-triggered",
+        "custom_config": {
+            "transcription": {
+                "engine": "mlx_whisper",
+                "model": "whisper-large-v3-turbo",
+                "language": "no"  # Norwegian
+            },
+            "vad": {
+                "sensitivity": 0.7,
+                "parameters": {
+                    # Individual VAD thresholds
+                    "webrtc_aggressiveness": 2,
+                    "silero_threshold": 0.6,
+                    # Frame processing settings
+                    "speech_confirmation_frames": 2,
+                    "silence_confirmation_frames": 30
+                }
+            }
+        }
     })
-
-# Start a transcription session
-response = requests.post("http://localhost:8080/transcription/session/start")
-session_id = response.json()["data"]["session_id"]
 
 # Connect to WebSocket for real-time events
 def on_message(ws, message):
@@ -169,13 +189,12 @@ def on_message(ws, message):
     if data["event"] == "transcription":
         print(f"Transcription: {data['text']}")
 
-ws = websocket.WebSocketApp("ws://localhost:8080/events",
+ws = websocket.WebSocketApp("ws://localhost:8000/events",
                           on_message=on_message)
 threading.Thread(target=ws.run_forever, daemon=True).start()
 
-# Later, stop the transcription session
-requests.post("http://localhost:8080/transcription/session/stop",
-    json={"session_id": session_id})
+# Later, stop the system
+requests.post("http://localhost:8000/system/stop")
 ```
 
 ### Included Example Scripts

@@ -5,270 +5,786 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Realtime MLX STT - Web Client</title>
     <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --primary-light: #818cf8;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+            --dark: #1e293b;
+            --light: #f8fafc;
+            --gray-50: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+            --shadow: rgba(0, 0, 0, 0.1);
+            --shadow-lg: rgba(0, 0, 0, 0.15);
+            --radius: 12px;
+            --radius-sm: 8px;
+            --radius-lg: 16px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        [data-theme="dark"] {
+            --dark: #f8fafc;
+            --light: #0f172a;
+            --gray-50: #0f172a;
+            --gray-100: #1e293b;
+            --gray-200: #334155;
+            --gray-300: #475569;
+            --gray-400: #64748b;
+            --gray-500: #94a3b8;
+            --gray-600: #cbd5e1;
+            --gray-700: #e2e8f0;
+            --gray-800: #f1f5f9;
+            --gray-900: #f8fafc;
+            --shadow: rgba(0, 0, 0, 0.3);
+            --shadow-lg: rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+            background: var(--gray-50);
+            color: var(--dark);
+            min-height: 100vh;
+            transition: var(--transition);
+            line-height: 1.6;
         }
+
+        /* Background gradient */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, var(--primary) 0%, transparent 50%),
+                        linear-gradient(225deg, var(--primary-light) 0%, transparent 50%);
+            opacity: 0.05;
+            z-index: -1;
+        }
+
         .container {
-            background: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
         }
-        h1 {
-            color: #333;
-            margin-bottom: 30px;
-        }
-        .section {
-            margin-bottom: 30px;
-            padding: 20px;
-            background: #f9f9f9;
-            border-radius: 8px;
-        }
-        .controls {
+
+        /* Header */
+        .header {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1.5rem 2rem;
+            background: var(--gray-100);
+            border-radius: var(--radius-lg);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px var(--shadow);
         }
-        button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Theme toggle */
+        .theme-toggle {
+            position: relative;
+            width: 60px;
+            height: 30px;
+            background: var(--gray-300);
+            border-radius: 15px;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: var(--transition);
         }
+
+        .theme-toggle::after {
+            content: '🌙';
+            position: absolute;
+            left: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            transition: var(--transition);
+        }
+
+        [data-theme="dark"] .theme-toggle::after {
+            content: '☀️';
+            left: calc(100% - 27px);
+        }
+
+        /* Cards */
+        .card {
+            background: var(--gray-100);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 20px var(--shadow);
+            backdrop-filter: blur(10px);
+            transition: var(--transition);
+            border: 1px solid var(--gray-200);
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px var(--shadow-lg);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--gray-200);
+        }
+
+        .card-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .card-header .icon {
+            font-size: 1.5rem;
+        }
+
+        /* Status indicators */
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: var(--transition);
+        }
+
+        .status::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        .status.connected {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .status.disconnected {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+
+        .status.recording {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        /* Buttons */
+        button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.5s;
+        }
+
+        button:hover::before {
+            left: 100%;
+        }
+
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        .primary {
-            background: #007bff;
+
+        button:disabled::before {
+            display: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
             color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
         }
-        .primary:hover:not(:disabled) {
-            background: #0056b3;
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
         }
-        .danger {
-            background: #dc3545;
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #059669);
             color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
         }
-        .danger:hover:not(:disabled) {
-            background: #c82333;
+
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
         }
-        .success {
-            background: #28a745;
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
             color: white;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
         }
-        .status {
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 10px;
+
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
         }
-        .status.connected {
-            background: #d4edda;
-            color: #155724;
+
+        /* Form controls */
+        .form-group {
+            margin-bottom: 1rem;
         }
-        .status.disconnected {
-            background: #f8d7da;
-            color: #721c24;
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--gray-600);
+            margin-bottom: 0.5rem;
         }
-        .status.recording {
-            background: #fff3cd;
-            color: #856404;
+
+        select, input[type="range"], input[type="text"] {
+            width: 100%;
+            padding: 0.5rem;
+            border: 2px solid var(--gray-300);
+            border-radius: var(--radius-sm);
+            background: var(--gray-50);
+            color: var(--dark);
+            font-size: 0.875rem;
+            transition: var(--transition);
         }
-        #transcription {
-            min-height: 200px;
-            padding: 15px;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            white-space: pre-wrap;
-            font-family: monospace;
-            overflow-y: auto;
-            max-height: 400px;
+
+        select:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
-        .log {
-            font-size: 12px;
-            color: #666;
-            padding: 5px;
-            background: #f0f0f0;
+
+        input[type="range"] {
+            padding: 0;
+            background: transparent;
+            border: none;
+        }
+
+        input[type="range"]::-webkit-slider-track {
+            width: 100%;
+            height: 6px;
+            background: var(--gray-300);
             border-radius: 3px;
-            margin-bottom: 5px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--primary);
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+            transition: var(--transition);
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        }
+
+        /* Grid layouts */
+        .grid {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .grid-cols-2 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .grid-cols-3 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        /* Transcription area */
+        .transcription-box {
+            min-height: 300px;
+            padding: 1.5rem;
+            background: var(--gray-50);
+            border: 2px solid var(--gray-200);
+            border-radius: var(--radius);
+            font-family: 'SF Mono', Monaco, Consolas, monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            overflow-y: auto;
+            max-height: 500px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .transcription-box::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .transcription-box::-webkit-scrollbar-track {
+            background: var(--gray-200);
+            border-radius: 4px;
+        }
+
+        .transcription-box::-webkit-scrollbar-thumb {
+            background: var(--gray-400);
+            border-radius: 4px;
+        }
+
+        /* Log entries */
+        .log-container {
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 0.5rem;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+        }
+
+        .log-entry {
+            font-size: 0.75rem;
+            color: var(--gray-600);
+            padding: 0.25rem 0.5rem;
+            margin-bottom: 0.25rem;
             font-family: monospace;
+            background: var(--gray-100);
+            border-radius: 4px;
         }
-        select {
-            padding: 8px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-            font-size: 16px;
+
+        /* Info box */
+        .info-box {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(99, 102, 241, 0.1));
+            border: 1px solid var(--primary-light);
+            color: var(--primary-dark);
+            padding: 1rem;
+            border-radius: var(--radius);
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
         }
-        .info {
-            background: #d1ecf1;
-            color: #0c5460;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
+
+        /* Advanced settings */
+        details {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--gray-50);
+            border-radius: var(--radius);
+            border: 1px solid var(--gray-200);
+        }
+
+        summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        summary::-webkit-details-marker {
+            display: none;
+        }
+
+        summary::before {
+            content: '▶';
+            transition: var(--transition);
+        }
+
+        details[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        /* Switch toggle */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .switch-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--gray-300);
+            transition: var(--transition);
+            border-radius: 24px;
+        }
+
+        .switch-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: var(--transition);
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        input:checked + .switch-slider {
+            background-color: var(--primary);
+        }
+
+        input:checked + .switch-slider:before {
+            transform: translateX(24px);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .grid-cols-3,
+            .grid-cols-2 {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .card {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        /* Active configuration display */
+        .config-display {
+            font-size: 0.75rem;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--gray-50);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--gray-200);
+        }
+
+        .config-display strong {
+            color: var(--primary);
+        }
+
+        /* Button groups */
+        .btn-group {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--gray-300);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 0.8s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        small {
+            font-size: 0.75rem;
+            color: var(--gray-500);
+            display: block;
+            margin-top: 0.25rem;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎤 Realtime MLX STT - Web Client</h1>
-        
-        <div class="info">
-            <strong>Note:</strong> This is a demonstration client. Make sure the server is running on http://localhost:8000 before using this interface.<br>
-            <strong>OpenAI Models:</strong> GPT-4o models require OPENAI_API_KEY environment variable to be set when starting the server.
+        <header class="header">
+            <h1>
+                <span>🎙️</span>
+                Realtime MLX STT
+            </h1>
+            <div class="theme-toggle" id="themeToggle"></div>
+        </header>
+
+        <div class="info-box">
+            <strong>ℹ️ Note:</strong> Ensure the server is running on http://localhost:8000. For OpenAI models, set OPENAI_API_KEY environment variable before starting the server.
         </div>
 
-        <div class="section">
-            <h2>Server Status</h2>
+        <!-- Server Status Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="icon">🖥️</span>
+                <h2>Server Status</h2>
+            </div>
             <div id="serverStatus" class="status disconnected">Disconnected</div>
-            <div class="controls">
-                <button id="checkHealth" class="primary">Check Health</button>
-                <button id="getProfiles" class="primary">Get Profiles</button>
+            <div class="btn-group" style="margin-top: 1rem;">
+                <button id="checkHealth" class="btn-primary">
+                    <span>🔍</span> Check Health
+                </button>
+                <button id="getProfiles" class="btn-primary">
+                    <span>📋</span> Get Profiles
+                </button>
             </div>
         </div>
 
-        <div class="section">
-            <h2>System Control</h2>
-            <div class="controls" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-                <div>
-                    <label for="modeSelect">Operating Mode:</label>
-                    <select id="modeSelect" style="width: 100%;">
-                        <option value="continuous">Continuous (Always listening)</option>
-                        <option value="vad-triggered" selected>VAD-Triggered (Speech detection)</option>
-                        <option value="wake-word">Wake Word ("Jarvis")</option>
+        <!-- System Control Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="icon">⚙️</span>
+                <h2>System Control</h2>
+            </div>
+            <div class="grid grid-cols-3" style="margin-bottom: 1.5rem;">
+                <div class="form-group">
+                    <label for="modeSelect">Operating Mode</label>
+                    <select id="modeSelect">
+                        <option value="continuous">Continuous</option>
+                        <option value="vad-triggered" selected>VAD-Triggered</option>
+                        <option value="wake-word">Wake Word</option>
                     </select>
                 </div>
-                <div>
-                    <label for="modelSelect">Model:</label>
-                    <select id="modelSelect" style="width: 100%;">
-                        <option value="whisper-large-v3-turbo">Whisper Large v3 Turbo (MLX)</option>
-                        <option value="gpt-4o-transcribe">GPT-4o Transcribe (OpenAI)</option>
-                        <option value="gpt-4o-mini-transcribe">GPT-4o Mini Transcribe (OpenAI)</option>
+                <div class="form-group">
+                    <label for="modelSelect">Model</label>
+                    <select id="modelSelect">
+                        <option value="whisper-large-v3-turbo">Whisper Large v3 Turbo</option>
+                        <option value="gpt-4o-transcribe">GPT-4o Transcribe</option>
+                        <option value="gpt-4o-mini-transcribe">GPT-4o Mini</option>
                     </select>
                 </div>
-                <div>
-                    <label for="languageSelect">Language:</label>
-                    <select id="languageSelect" style="width: 100%;">
+                <div class="form-group">
+                    <label for="languageSelect">Language</label>
+                    <select id="languageSelect">
                         <option value="">Auto-detect</option>
-                        <option value="no">Norwegian</option>
-                        <option value="en">English</option>
-                        <option value="es">Spanish</option>
-                        <option value="fr">French</option>
-                        <option value="de">German</option>
-                        <option value="it">Italian</option>
-                        <option value="pt">Portuguese</option>
-                        <option value="nl">Dutch</option>
-                        <option value="pl">Polish</option>
-                        <option value="ru">Russian</option>
-                        <option value="zh">Chinese</option>
-                        <option value="ja">Japanese</option>
-                        <option value="ko">Korean</option>
+                        <option value="no">🇳🇴 Norwegian</option>
+                        <option value="en">🇬🇧 English</option>
+                        <option value="es">🇪🇸 Spanish</option>
+                        <option value="fr">🇫🇷 French</option>
+                        <option value="de">🇩🇪 German</option>
+                        <option value="it">🇮🇹 Italian</option>
+                        <option value="pt">🇵🇹 Portuguese</option>
+                        <option value="zh">🇨🇳 Chinese</option>
+                        <option value="ja">🇯🇵 Japanese</option>
                     </select>
                 </div>
             </div>
-            <div class="controls" style="margin-top: 15px;">
-                <button id="startSystem" class="success">Start System</button>
-                <button id="stopSystem" class="danger" disabled>Stop System</button>
+            <div class="btn-group">
+                <button id="startSystem" class="btn-success">
+                    <span>▶️</span> Start System
+                </button>
+                <button id="stopSystem" class="btn-danger" disabled>
+                    <span>⏹️</span> Stop System
+                </button>
             </div>
-            <div id="transcriptionStatus" class="status disconnected" style="margin-top: 15px;">System Stopped</div>
+            <div id="transcriptionStatus" class="status disconnected" style="margin-top: 1rem;">System Stopped</div>
+            <div id="activeConfig" class="config-display" style="display: none;"></div>
         </div>
 
-        <div class="section">
-            <h2>VAD Configuration</h2>
-            <div class="info" style="margin-bottom: 15px;">
-                <strong>Note:</strong> VAD settings only apply to "VAD-Triggered" and "Wake Word" modes. They are ignored in "Continuous" mode.
+        <!-- VAD Configuration Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="icon">🎯</span>
+                <h2>VAD Configuration</h2>
             </div>
-            <div class="controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div>
-                    <label for="vadSensitivity">VAD Sensitivity (Overall): <span id="vadValue">0.6</span></label>
-                    <input type="range" id="vadSensitivity" min="0" max="1" step="0.1" value="0.6" style="width: 100%;">
+            <div class="info-box" style="font-size: 0.8rem;">
+                VAD settings apply only to "VAD-Triggered" and "Wake Word" modes.
+            </div>
+            <div class="grid grid-cols-2">
+                <div class="form-group">
+                    <label for="vadSensitivity">
+                        VAD Sensitivity: <span id="vadValue">0.6</span>
+                    </label>
+                    <input type="range" id="vadSensitivity" min="0" max="1" step="0.1" value="0.6">
                 </div>
-                <div>
-                    <label for="minSpeechDuration">Min Speech Duration: <span id="speechDurValue">0.25</span>s</label>
-                    <input type="range" id="minSpeechDuration" min="0.1" max="2" step="0.05" value="0.25" style="width: 100%;">
+                <div class="form-group">
+                    <label for="minSpeechDuration">
+                        Min Speech Duration: <span id="speechDurValue">0.25</span>s
+                    </label>
+                    <input type="range" id="minSpeechDuration" min="0.1" max="2" step="0.05" value="0.25">
                 </div>
-                <div style="grid-column: span 2;">
-                    <details>
-                        <summary style="cursor: pointer; font-weight: bold;">Advanced VAD Settings</summary>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                            <div>
-                                <label for="webrtcAggressiveness">WebRTC Aggressiveness: <span id="webrtcValue">2</span></label>
-                                <input type="range" id="webrtcAggressiveness" min="0" max="3" step="1" value="2" style="width: 100%;">
-                                <small style="color: #666;">0=Least aggressive, 3=Most aggressive</small>
-                            </div>
-                            <div>
-                                <label for="sileroThreshold">Silero Threshold: <span id="sileroValue">0.6</span></label>
-                                <input type="range" id="sileroThreshold" min="0.1" max="0.9" step="0.05" value="0.6" style="width: 100%;">
-                                <small style="color: #666;">Higher = More conservative</small>
-                            </div>
-                            <div>
-                                <label for="webrtcThreshold">WebRTC History Threshold: <span id="webrtcHistValue">0.6</span></label>
-                                <input type="range" id="webrtcThreshold" min="0.3" max="0.9" step="0.05" value="0.6" style="width: 100%;">
-                                <small style="color: #666;">Threshold for WebRTC history buffer</small>
-                            </div>
-                            <div>
-                                <label for="useAdvanced">
-                                    <input type="checkbox" id="useAdvanced"> Use individual thresholds
-                                </label>
-                                <small style="color: #666;">Override overall sensitivity</small>
-                            </div>
-                            <div style="grid-column: span 2;">
-                                <h4 style="margin: 10px 0 5px 0;">Frame Processing Settings</h4>
-                            </div>
-                            <div>
-                                <label for="frameDuration">Frame Duration: <span id="frameDurValue">30</span>ms</label>
-                                <select id="frameDuration" style="width: 100%;">
-                                    <option value="10">10ms (Low latency)</option>
-                                    <option value="20">20ms</option>
-                                    <option value="30" selected>30ms (Default)</option>
-                                </select>
-                                <small style="color: #666;">Audio frame size for WebRTC</small>
-                            </div>
-                            <div>
-                                <label for="speechConfFrames">Speech Confirmation: <span id="speechConfValue">2</span> frames</label>
-                                <input type="range" id="speechConfFrames" min="1" max="5" step="1" value="2" style="width: 100%;">
-                                <small style="color: #666;">Frames to confirm speech (1-5)</small>
-                            </div>
-                            <div>
-                                <label for="silenceConfFrames">Silence Confirmation: <span id="silenceConfValue">30</span> frames</label>
-                                <input type="range" id="silenceConfFrames" min="10" max="60" step="5" value="30" style="width: 100%;">
-                                <small style="color: #666;">Frames to confirm silence (10-60)</small>
-                            </div>
-                            <div>
-                                <label for="speechBufferSize">Speech Buffer Size: <span id="speechBufValue">100</span> frames</label>
-                                <input type="range" id="speechBufferSize" min="50" max="200" step="10" value="100" style="width: 100%;">
-                                <small style="color: #666;">Max speech buffer (50-200)</small>
-                            </div>
-                        </div>
-                    </details>
+            </div>
+            
+            <details>
+                <summary>Advanced Settings</summary>
+                <div class="grid grid-cols-2" style="margin-top: 1rem;">
+                    <div class="form-group">
+                        <label for="webrtcAggressiveness">
+                            WebRTC Aggressiveness: <span id="webrtcValue">2</span>
+                        </label>
+                        <input type="range" id="webrtcAggressiveness" min="0" max="3" step="1" value="2">
+                        <small>0=Least aggressive, 3=Most aggressive</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="sileroThreshold">
+                            Silero Threshold: <span id="sileroValue">0.6</span>
+                        </label>
+                        <input type="range" id="sileroThreshold" min="0.1" max="0.9" step="0.05" value="0.6">
+                        <small>Higher = More conservative</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="frameDuration">Frame Duration</label>
+                        <select id="frameDuration">
+                            <option value="10">10ms (Low latency)</option>
+                            <option value="20">20ms</option>
+                            <option value="30" selected>30ms (Default)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="useAdvanced" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span class="switch">
+                                <input type="checkbox" id="useAdvanced">
+                                <span class="switch-slider"></span>
+                            </span>
+                            Use individual thresholds
+                        </label>
+                    </div>
                 </div>
+            </details>
+        </div>
+
+        <!-- Wake Word Configuration Card -->
+        <div class="card" id="wakeWordCard" style="display: none;">
+            <div class="card-header">
+                <span class="icon">🗣️</span>
+                <h2>Wake Word Configuration</h2>
+            </div>
+            <div class="info-box" style="font-size: 0.8rem;">
+                Configure the wake word that triggers transcription. Default is "Jarvis".
+            </div>
+            <div class="grid grid-cols-2">
+                <div class="form-group">
+                    <label for="wakeWordInput">Wake Word</label>
+                    <input type="text" id="wakeWordInput" value="jarvis" placeholder="Enter wake word" 
+                           style="width: 100%; padding: 0.5rem; border: 2px solid var(--gray-300); border-radius: var(--radius-sm); background: var(--gray-50); color: var(--dark); font-size: 0.875rem; transition: var(--transition);">
+                    <small>Supported: jarvis, alexa, computer, hey google, ok google, hey siri</small>
+                </div>
+                <div class="form-group">
+                    <label for="wakeWordSensitivity">
+                        Wake Word Sensitivity: <span id="wakeWordValue">0.7</span>
+                    </label>
+                    <input type="range" id="wakeWordSensitivity" min="0.1" max="1" step="0.05" value="0.7">
+                    <small>Higher = Less likely to trigger accidentally</small>
+                </div>
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label for="wakeWordTimeout">
+                    Speech Timeout: <span id="wakeWordTimeoutValue">30</span>s
+                </label>
+                <input type="range" id="wakeWordTimeout" min="5" max="60" step="5" value="30">
+                <small>Time to wait for speech after wake word detection</small>
             </div>
         </div>
 
-        <div class="section">
-            <h2>WebSocket Connection</h2>
-            <div class="controls">
-                <button id="connectWS" class="primary">Connect WebSocket</button>
-                <button id="disconnectWS" class="danger" disabled>Disconnect</button>
-                <button id="simulateAudio" class="primary" disabled>Simulate Audio</button>
+        <!-- WebSocket Connection Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="icon">🔌</span>
+                <h2>WebSocket Connection</h2>
             </div>
             <div id="wsStatus" class="status disconnected">Disconnected</div>
+            <div class="btn-group" style="margin-top: 1rem;">
+                <button id="connectWS" class="btn-primary">
+                    <span>🔗</span> Connect
+                </button>
+                <button id="disconnectWS" class="btn-danger" disabled>
+                    <span>✂️</span> Disconnect
+                </button>
+            </div>
         </div>
 
-        <div class="section">
-            <h2>Transcription Output</h2>
-            <div id="transcription">Transcription will appear here...</div>
+        <!-- Transcription Output Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="icon">📝</span>
+                <h2>Transcription Output</h2>
+            </div>
+            <div id="transcription" class="transcription-box">Waiting for transcription...</div>
         </div>
 
-        <div class="section">
-            <h2>Log</h2>
-            <div id="log"></div>
+        <!-- Log Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="icon">📜</span>
+                <h2>System Log</h2>
+            </div>
+            <div id="log" class="log-container"></div>
         </div>
     </div>
 
@@ -287,12 +803,25 @@
         const wsStatus = document.getElementById('wsStatus');
         const transcriptionDiv = document.getElementById('transcription');
         const logDiv = document.getElementById('log');
+        const activeConfig = document.getElementById('activeConfig');
+        
+        // Theme handling
+        const themeToggle = document.getElementById('themeToggle');
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', currentTheme);
+        
+        themeToggle.addEventListener('click', () => {
+            const theme = document.documentElement.getAttribute('data-theme');
+            const newTheme = theme === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        });
         
         // Utility functions
         function log(message, type = 'info') {
             const timestamp = new Date().toLocaleTimeString();
             const logEntry = document.createElement('div');
-            logEntry.className = 'log';
+            logEntry.className = 'log-entry';
             logEntry.textContent = `[${timestamp}] ${message}`;
             logDiv.insertBefore(logEntry, logDiv.firstChild);
             
@@ -304,13 +833,13 @@
         
         function updateServerStatus(connected) {
             serverStatus.className = `status ${connected ? 'connected' : 'disconnected'}`;
-            serverStatus.textContent = connected ? 'Server Connected' : 'Server Disconnected';
+            serverStatus.textContent = connected ? 'Server Online' : 'Server Offline';
         }
         
         function updateTranscriptionStatus(recording) {
             isRecording = recording;
             transcriptionStatus.className = `status ${recording ? 'recording' : 'disconnected'}`;
-            transcriptionStatus.innerHTML = recording ? 'System Running' : 'System Stopped';
+            transcriptionStatus.textContent = recording ? 'System Running' : 'System Stopped';
             
             document.getElementById('startSystem').disabled = recording;
             document.getElementById('stopSystem').disabled = !recording;
@@ -318,11 +847,29 @@
         
         function updateWSStatus(connected) {
             wsStatus.className = `status ${connected ? 'connected' : 'disconnected'}`;
-            wsStatus.textContent = connected ? 'WebSocket Connected' : 'WebSocket Disconnected';
+            wsStatus.textContent = connected ? 'Connected' : 'Disconnected';
             
             document.getElementById('connectWS').disabled = connected;
             document.getElementById('disconnectWS').disabled = !connected;
-            document.getElementById('simulateAudio').disabled = !connected;
+        }
+        
+        function showActiveConfig(config) {
+            if (!config) {
+                activeConfig.style.display = 'none';
+                return;
+            }
+            
+            activeConfig.style.display = 'block';
+            activeConfig.innerHTML = `
+                <strong>Active Configuration:</strong><br>
+                Mode: ${config.mode || 'N/A'}<br>
+                Model: ${config.model || 'N/A'}<br>
+                Language: ${config.language || 'Auto-detect'}<br>
+                VAD: ${config.vad_enabled ? 'Enabled' : 'Disabled'}<br>
+                ${config.vad_enabled ? `VAD Sensitivity: ${config.vad_sensitivity || 'N/A'}<br>` : ''}
+                ${config.wake_word ? `Wake Word: "${config.wake_word}"<br>` : ''}
+                ${config.wake_word_sensitivity ? `Wake Word Sensitivity: ${config.wake_word_sensitivity}<br>` : ''}
+            `;
         }
         
         // API functions
@@ -345,7 +892,6 @@
                 const response = await fetch(`${API_BASE}/system/profiles`);
                 const data = await response.json();
                 log(`Retrieved ${Object.keys(data.profiles).length} profiles`);
-                console.log('Profiles:', data);
                 
                 // Show profiles in transcription area
                 transcriptionDiv.textContent = JSON.stringify(data, null, 2);
@@ -365,11 +911,9 @@
             const useAdvanced = document.getElementById('useAdvanced').checked;
             
             try {
-                // Determine engine type based on model selection
                 const isOpenAI = model.includes('gpt-4o');
                 const engine = isOpenAI ? 'openai' : 'mlx_whisper';
                 
-                // Create custom profile configuration
                 const customConfig = {
                     transcription: {
                         engine: engine,
@@ -378,7 +922,7 @@
                         auto_start: true
                     },
                     vad: {
-                        enabled: true,
+                        enabled: mode !== 'continuous',
                         detector_type: "combined",
                         sensitivity: vadSensitivity,
                         min_speech_duration: minSpeechDuration,
@@ -386,30 +930,25 @@
                     }
                 };
                 
-                // Add individual thresholds if advanced mode is enabled
                 if (useAdvanced) {
                     customConfig.vad.parameters = {
                         webrtc_aggressiveness: parseInt(document.getElementById('webrtcAggressiveness').value),
                         silero_threshold: parseFloat(document.getElementById('sileroThreshold').value),
-                        webrtc_threshold: parseFloat(document.getElementById('webrtcThreshold').value),
-                        frame_duration_ms: parseInt(document.getElementById('frameDuration').value),
-                        speech_confirmation_frames: parseInt(document.getElementById('speechConfFrames').value),
-                        silence_confirmation_frames: parseInt(document.getElementById('silenceConfFrames').value),
-                        speech_buffer_size: parseInt(document.getElementById('speechBufferSize').value)
+                        frame_duration_ms: parseInt(document.getElementById('frameDuration').value)
                     };
                 }
                 
-                // Override VAD enabled based on mode
-                if (mode === 'continuous') {
-                    customConfig.vad.enabled = false;  // No VAD in continuous mode
-                } else if (mode === 'wake-word') {
-                    // For wake word, include wake word config
+                if (mode === 'wake-word') {
+                    const wakeWord = document.getElementById('wakeWordInput').value.toLowerCase().trim() || 'jarvis';
+                    const wakeWordSensitivity = parseFloat(document.getElementById('wakeWordSensitivity').value);
+                    const wakeWordTimeout = parseInt(document.getElementById('wakeWordTimeout').value);
+                    
                     customConfig.wake_word = {
                         enabled: true,
                         detector: "porcupine",
-                        words: ["jarvis"],
-                        sensitivity: 0.7,
-                        timeout: 30
+                        words: [wakeWord],
+                        sensitivity: wakeWordSensitivity,
+                        timeout: wakeWordTimeout
                     };
                 }
                 
@@ -424,36 +963,35 @@
                 const data = await response.json();
                 
                 if (data.data && data.data.started) {
-                    log(`Started system with mode: ${mode}`);
+                    log(`Started system with ${mode} mode`);
                     updateTranscriptionStatus(true);
+                    const config = {
+                        mode: mode,
+                        model: model,
+                        language: language,
+                        vad_enabled: customConfig.vad.enabled,
+                        vad_sensitivity: vadSensitivity
+                    };
                     
-                    // Update status with configuration details
-                    const statusInfo = document.createElement('div');
-                    statusInfo.style.cssText = 'font-size: 0.9em; margin-top: 10px; color: #666;';
-                    statusInfo.innerHTML = `
-                        <strong>Active Configuration:</strong><br>
-                        Mode: ${mode.replace('-', ' ').toUpperCase()}<br>
-                        Model: ${model}<br>
-                        Language: ${language || 'Auto-detect'}<br>
-                        VAD Enabled: ${customConfig.vad.enabled ? 'Yes' : 'No'}<br>
-                        ${customConfig.vad.enabled ? `VAD Sensitivity: ${vadSensitivity}<br>Min Speech Duration: ${minSpeechDuration}s<br>` : ''}
-                        ${useAdvanced && customConfig.vad.enabled ? `WebRTC Aggressiveness: ${customConfig.vad.parameters.webrtc_aggressiveness}<br>Silero Threshold: ${customConfig.vad.parameters.silero_threshold}<br>` : ''}
-                        Active Features: ${data.data.active_features ? data.data.active_features.join(', ') : 'N/A'}
-                    `;
-                    transcriptionStatus.appendChild(statusInfo);
+                    if (mode === 'wake-word') {
+                        config.wake_word = customConfig.wake_word.words[0];
+                        config.wake_word_sensitivity = customConfig.wake_word.sensitivity;
+                    }
                     
-                    transcriptionDiv.textContent = 'System running - Listening for audio...\n\n';
+                    showActiveConfig(config);
                     
-                    // Auto-connect WebSocket when system starts
+                    transcriptionDiv.textContent = 'System running - Listening...\n\n';
+                    
+                    // Auto-connect WebSocket
                     if (!ws || ws.readyState !== WebSocket.OPEN) {
                         connectWebSocket();
                     }
                 } else {
-                    log(`Failed to start system: ${data.detail || 'Unknown error'}`, 'error');
+                    log(`Failed to start: ${data.detail || 'Unknown error'}`, 'error');
                 }
                 return data;
             } catch (error) {
-                log(`Failed to start system: ${error.message}`, 'error');
+                log(`Failed to start: ${error.message}`, 'error');
                 return null;
             }
         }
@@ -466,12 +1004,12 @@
                     body: JSON.stringify({})
                 });
                 const data = await response.json();
-                log('Stopped system');
+                log('System stopped');
                 updateTranscriptionStatus(false);
-                transcriptionDiv.textContent = 'System stopped';
+                showActiveConfig(null);
                 return data;
             } catch (error) {
-                log(`Failed to stop system: ${error.message}`, 'error');
+                log(`Failed to stop: ${error.message}`, 'error');
                 return null;
             }
         }
@@ -492,18 +1030,12 @@
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    log(`Received: ${data.event || 'message'}`);
                     
-                    // Handle transcription events
                     if (data.event === 'transcription') {
                         if (data.is_final) {
-                            // Final transcription
-                            transcriptionDiv.textContent += `[${new Date().toLocaleTimeString()}] ${data.text}\n`;
+                            const time = new Date().toLocaleTimeString();
+                            transcriptionDiv.textContent += `[${time}] ${data.text}\n`;
                             transcriptionDiv.scrollTop = transcriptionDiv.scrollHeight;
-                            log(`Transcription: ${data.text}`);
-                        } else {
-                            // Partial transcription (if applicable)
-                            log(`Partial: ${data.text}`);
                         }
                     } else if (data.event === 'wake_word') {
                         log(`Wake word detected: ${data.word}`);
@@ -516,7 +1048,6 @@
             
             ws.onerror = (error) => {
                 log('WebSocket error', 'error');
-                console.error('WebSocket error:', error);
             };
             
             ws.onclose = () => {
@@ -532,19 +1063,6 @@
                 ws = null;
             }
         }
-        
-        function simulateAudio() {
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                log('WebSocket not connected', 'error');
-                return;
-            }
-            
-            // Send simulated audio data
-            const fakeAudio = new ArrayBuffer(1024);
-            ws.send(fakeAudio);
-            log('Sent simulated audio chunk');
-        }
-        
         
         // Update slider labels
         document.getElementById('vadSensitivity').oninput = function() {
@@ -563,24 +1081,22 @@
             document.getElementById('sileroValue').textContent = this.value;
         };
         
-        document.getElementById('webrtcThreshold').oninput = function() {
-            document.getElementById('webrtcHistValue').textContent = this.value;
+        document.getElementById('wakeWordSensitivity').oninput = function() {
+            document.getElementById('wakeWordValue').textContent = this.value;
         };
         
-        document.getElementById('frameDuration').onchange = function() {
-            document.getElementById('frameDurValue').textContent = this.value;
+        document.getElementById('wakeWordTimeout').oninput = function() {
+            document.getElementById('wakeWordTimeoutValue').textContent = this.value;
         };
         
-        document.getElementById('speechConfFrames').oninput = function() {
-            document.getElementById('speechConfValue').textContent = this.value;
-        };
-        
-        document.getElementById('silenceConfFrames').oninput = function() {
-            document.getElementById('silenceConfValue').textContent = this.value;
-        };
-        
-        document.getElementById('speechBufferSize').oninput = function() {
-            document.getElementById('speechBufValue').textContent = this.value;
+        // Show/hide wake word card based on mode
+        document.getElementById('modeSelect').onchange = function() {
+            const wakeWordCard = document.getElementById('wakeWordCard');
+            if (this.value === 'wake-word') {
+                wakeWordCard.style.display = 'block';
+            } else {
+                wakeWordCard.style.display = 'none';
+            }
         };
         
         // Event listeners
@@ -590,7 +1106,6 @@
         document.getElementById('stopSystem').onclick = stopSystem;
         document.getElementById('connectWS').onclick = connectWebSocket;
         document.getElementById('disconnectWS').onclick = disconnectWebSocket;
-        document.getElementById('simulateAudio').onclick = simulateAudio;
         
         // Initial health check
         checkHealth();

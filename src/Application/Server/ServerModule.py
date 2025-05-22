@@ -139,8 +139,9 @@ class Server:
     def handle_wake_word_detected(self, event: WakeWordDetectedEvent):
         """Handle wake word detection events."""
         self.websocket_manager.broadcast_event("wake_word", {
-            "word": event.word,
-            "timestamp": event.timestamp
+            "word": event.wake_word,
+            "confidence": event.confidence,
+            "timestamp": event.audio_timestamp
         })
     
     def start(self):

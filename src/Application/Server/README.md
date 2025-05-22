@@ -2,6 +2,14 @@
 
 This module provides a server-based architecture for the Realtime_mlx_STT system, allowing speech-to-text functionality to be accessed through HTTP and WebSocket APIs. The server integrates with the existing command/event architecture without modifying the core functionality.
 
+## Recent Updates
+
+- **Simplified Profiles**: Now offers 3 operating modes (continuous, vad-triggered, wake-word) separate from model selection
+- **Custom Configuration**: Full support for runtime configuration overrides
+- **Enhanced VAD Control**: Individual threshold settings for WebRTC and Silero detectors
+- **Frame Processing**: Configurable frame duration and confirmation windows
+- **Model Options**: Supports whisper-large-v3-turbo (MLX), gpt-4o-transcribe, and gpt-4o-mini-transcribe (OpenAI)
+
 ## Architecture
 
 The server uses FastAPI to provide:
@@ -27,7 +35,7 @@ The server uses FastAPI to provide:
 - `GET /system/profiles/{name}` - Get a specific configuration profile
 - `POST /system/profiles` - Save a configuration profile
 - `DELETE /system/profiles/{name}` - Delete a configuration profile
-- `POST /system/start` - Start the system with a profile
+- `POST /system/start` - Start the system with a profile and optional custom configuration
 - `POST /system/stop` - Stop the system
 - `POST /system/config` - Update system configuration
 
@@ -80,7 +88,7 @@ The server can be configured through:
 
 1. Environment variables:
    - `STT_SERVER_HOST` - Host to bind to (default: "127.0.0.1")
-   - `STT_SERVER_PORT` - Port to bind to (default: 8080)
+   - `STT_SERVER_PORT` - Port to bind to (default: 8000)
    - `STT_SERVER_DEBUG` - Enable debug mode (default: false)
    - `STT_SERVER_AUTO_START` - Auto-start the server (default: true)
    - `STT_SERVER_CORS_ORIGINS` - Comma-separated list of allowed CORS origins
@@ -90,7 +98,7 @@ The server can be configured through:
    {
      "server": {
        "host": "127.0.0.1",
-       "port": 8080,
+       "port": 8000,
        "debug": false,
        "auto_start": true,
        "cors_origins": ["*"]
@@ -115,14 +123,19 @@ The server can be configured through:
 
 ## Profiles
 
-The server supports configuration profiles for easy setup:
+The server supports simplified configuration profiles for easy setup:
 
-- `continuous-mlx` - Always-on MLX transcription
-- `wake-word-mlx` - Wake word with MLX transcription
-- `wake-word-openai` - Wake word with OpenAI transcription
-- `wake-word-clipboard` - Wake word with clipboard integration
+### Operating Modes
+- `continuous` - Always-on transcription
+- `vad-triggered` - Transcription triggered by voice activity detection
+- `wake-word` - Wake word activated transcription
 
-Profiles can be loaded, saved, and managed through the API.
+### Model Selection (separate from profiles)
+- `whisper-large-v3-turbo` - MLX-optimized Whisper model
+- `gpt-4o-transcribe` - OpenAI's GPT-4o transcription
+- `gpt-4o-mini-transcribe` - OpenAI's GPT-4o-mini transcription
+
+Profiles can be loaded, saved, and managed through the API. Custom configurations can be provided at runtime to override profile defaults.
 
 ## Integration with Existing Code
 
@@ -133,3 +146,51 @@ The server integrates with the existing codebase through:
 3. Dispatching commands to trigger actions in other modules
 
 All communication happens through the existing architecture, ensuring that the server doesn't modify any core functionality.
+
+## Custom Configuration Example
+
+When starting the system, you can override profile defaults:
+
+```python
+# Start with a profile and custom VAD settings
+POST /system/start
+{
+    "profile": "vad-triggered",
+    "custom_config": {
+        "transcription": {
+            "engine": "whisper-large-v3-turbo",
+            "language": "no"  // Norwegian
+        },
+        "vad": {
+            "detector_type": "combined",
+            "webrtc_aggressiveness": 3,
+            "silero_threshold": 0.6,
+            "frame_duration_ms": 30,
+            "speech_confirmation_frames": 3,
+            "silence_confirmation_frames": 10
+        }
+    }
+}
+```
+
+## WebSocket Client Example
+
+```javascript
+const ws = new WebSocket('ws://localhost:8000/events');
+
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    
+    switch(data.type) {
+        case 'transcription':
+            console.log('Transcription:', data.data.text);
+            break;
+        case 'speech_detected':
+            console.log('Speech started');
+            break;
+        case 'silence_detected':
+            console.log('Speech ended');
+            break;
+    }
+};
+```
