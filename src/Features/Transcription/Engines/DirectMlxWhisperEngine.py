@@ -390,9 +390,9 @@ def load_audio(file_path, sr=16000):
         logger.info(f"Converted to MLX array: shape={result_array.shape}")
         return result_array
         
-    except Exception as e:
+    except Exception as initial_error:
         # Last resort: try ffmpeg style loading
-        logger.warning(f"Standard loading failed ({str(e)}), trying ffmpeg")
+        logger.warning(f"Standard loading failed ({str(initial_error)}), trying ffmpeg")
         try:
             from subprocess import CalledProcessError, run
             
@@ -405,8 +405,8 @@ def load_audio(file_path, sr=16000):
             return result
             
         except Exception as ffmpeg_error:
-            logger.error(f"Failed to load audio: {str(e)}, ffmpeg error: {str(ffmpeg_error)}")
-            raise RuntimeError(f"Failed to load audio: {str(e)}, ffmpeg error: {str(ffmpeg_error)}")
+            logger.error(f"Failed to load audio - initial error: {str(initial_error)}, ffmpeg error: {str(ffmpeg_error)}")
+            raise RuntimeError(f"Failed to load audio - initial error: {str(initial_error)}, ffmpeg error: {str(ffmpeg_error)}")
 
 
 def log_mel_spectrogram(audio, n_mels=128, padding=0):

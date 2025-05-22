@@ -163,7 +163,7 @@ class PyAudioInputProvider(IAudioProvider):
             
             self.recording_thread = threading.Thread(
                 target=self._recording_worker,
-                daemon=True
+                daemon=False  # Non-daemon for proper cleanup
             )
             self.recording_thread.start()
             
@@ -216,7 +216,11 @@ class PyAudioInputProvider(IAudioProvider):
             if self.recording_thread and self.recording_thread.is_alive():
                 self.recording_thread.join(timeout=2.0)
                 if self.recording_thread.is_alive():
-                    self.logger.warning("Recording thread did not stop in time")
+                    self.logger.error("Recording thread did not stop in time, forcing termination")
+                    # Force stop by setting is_recording to False
+                    self.is_recording = False
+                    # Try join once more with shorter timeout
+                    self.recording_thread.join(timeout=0.5)
             
             # Close the stream
             if self.stream:
@@ -297,12 +301,26 @@ class PyAudioInputProvider(IAudioProvider):
         """
         self.logger.info("Cleaning up PyAudio resources")
         
+        # Ensure recording is stopped
         if self.is_recording:
             self.stop()
         
+        # Ensure thread is terminated
+        if self.recording_thread and self.recording_thread.is_alive():
+            self.stop_recording_event.set()
+            self.is_recording = False
+            self.recording_thread.join(timeout=1.0)
+            if self.recording_thread.is_alive():
+                self.logger.error("Failed to cleanly stop recording thread during cleanup")
+        
+        # Cleanup PyAudio resources
         if self.audio_interface:
-            self.audio_interface.terminate()
-            self.audio_interface = None
+            try:
+                self.audio_interface.terminate()
+            except Exception as e:
+                self.logger.error(f"Error terminating PyAudio: {e}")
+            finally:
+                self.audio_interface = None
     
     def list_devices(self) -> List[Dict[str, Any]]:
         """
