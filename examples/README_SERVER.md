@@ -232,11 +232,36 @@ For fine-grained control, you can adjust each VAD component separately:
 Example with individual thresholds:
 ```javascript
 customConfig.vad.parameters = {
-    webrtc_aggressiveness: 2,
-    silero_threshold: 0.7,
-    webrtc_threshold: 0.5
+    // Detection thresholds
+    webrtc_aggressiveness: 2,      // 0-3
+    silero_threshold: 0.7,         // 0.1-0.9
+    webrtc_threshold: 0.5,         // 0.3-0.9
+    
+    // Frame processing settings
+    frame_duration_ms: 30,         // 10-50ms
+    speech_confirmation_frames: 2,  // 1-5 frames
+    silence_confirmation_frames: 30, // 10-60 frames
+    speech_buffer_size: 100        // 50-200 frames
 }
 ```
+
+#### Frame Processing Settings
+- **Frame Duration** (10-50ms): Size of audio frames for processing
+  - 10ms - Lower latency, higher CPU usage
+  - 30ms - Default, good balance
+  - 50ms - Lower CPU usage, higher latency
+- **Speech Confirmation Frames** (1-5): Frames needed to confirm speech started
+  - 1 - Very responsive, more false positives
+  - 2 - Default, balanced
+  - 5 - Very conservative, may miss short utterances
+- **Silence Confirmation Frames** (10-60): Frames needed to confirm speech ended
+  - 10 - Quick cutoff, may truncate speech
+  - 30 - Default, allows natural pauses
+  - 60 - Very long pauses allowed
+- **Speech Buffer Size** (50-200): Maximum frames to buffer during speech
+  - 50 - Suitable for short commands
+  - 100 - Default, good for most use cases
+  - 200 - For long monologues
 
 ## Production Considerations
 

@@ -55,20 +55,18 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         self.logger = LoggingModule.get_logger(__name__)
         self.event_bus = event_bus
         
-        # Initialize detector registry
-        self.detectors: Dict[str, IVoiceActivityDetector] = {
-            'webrtc': WebRtcVadDetector(),
-            'silero': SileroVadDetector(),
-            'combined': CombinedVadDetector()
+        # Initialize empty detector registry - detectors will be created lazily
+        self.detectors: Dict[str, IVoiceActivityDetector] = {}
+        
+        # Store detector configurations for lazy initialization
+        self.detector_configs: Dict[str, Dict[str, Any]] = {
+            'webrtc': {},
+            'silero': {},
+            'combined': {}
         }
         
-        # Set up all detectors
-        for name, detector in self.detectors.items():
-            if not detector.setup():
-                self.logger.warning(f"Failed to set up {name} detector")
-        
         # Set default active detector
-        self.active_detector_name = 'webrtc'  # Use WebRTC by default (lightweight)
+        self.active_detector_name = 'combined'  # Default to combined for best accuracy
         
         # Processing control - start with processing disabled to save resources
         self.processing_enabled = False
@@ -205,14 +203,20 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         # Update active detector
         self.active_detector_name = command.detector_type
         
-        # Get detector
-        detector = self._get_detector(command.detector_type)
-        
         # Map command parameters to detector configuration
         config = command.map_to_detector_config()
         
-        # Configure detector
-        success = detector.configure(config)
+        # Store configuration for this detector type
+        self.detector_configs[command.detector_type] = config
+        
+        # If detector already exists, reconfigure it
+        if command.detector_type in self.detectors:
+            detector = self.detectors[command.detector_type]
+            success = detector.configure(config)
+        else:
+            # Detector will be created with this config when first used
+            self.logger.info(f"Stored configuration for {command.detector_type} detector (will be created on first use)")
+            success = True
         
         # Update buffer limit if specified
         if 'buffer_limit' in command.parameters:
@@ -245,7 +249,7 @@ class VoiceActivityHandler(ICommandHandler[Any]):
     
     def _get_detector(self, detector_name: str) -> IVoiceActivityDetector:
         """
-        Get the specified detector.
+        Get the specified detector, creating it lazily if needed.
         
         Args:
             detector_name: Name of the detector to get
@@ -256,11 +260,76 @@ class VoiceActivityHandler(ICommandHandler[Any]):
         Raises:
             ValueError: If the detector name is not found
         """
-        if detector_name not in self.detectors:
-            available_detectors = ", ".join(self.detectors.keys())
+        # Check if detector is already created
+        if detector_name in self.detectors:
+            return self.detectors[detector_name]
+        
+        # Check if this is a valid detector type
+        if detector_name not in self.detector_configs:
+            available_detectors = ", ".join(self.detector_configs.keys())
             raise ValueError(f"Detector '{detector_name}' not found. Available detectors: {available_detectors}")
         
-        return self.detectors[detector_name]
+        # Create the detector with stored configuration
+        detector = self._create_detector(detector_name, self.detector_configs[detector_name])
+        if detector:
+            self.detectors[detector_name] = detector
+            return detector
+        else:
+            raise ValueError(f"Failed to create detector '{detector_name}'")
+    
+    def _create_detector(self, detector_type: str, config: Dict[str, Any]) -> Optional[IVoiceActivityDetector]:
+        """
+        Create a detector with the given configuration.
+        
+        Args:
+            detector_type: Type of detector to create
+            config: Configuration parameters for the detector
+            
+        Returns:
+            Optional[IVoiceActivityDetector]: The created detector or None if failed
+        """
+        try:
+            if detector_type == 'webrtc':
+                detector = WebRtcVadDetector(
+                    aggressiveness=config.get('aggressiveness', 3),
+                    frame_duration_ms=config.get('frame_duration_ms', 30),
+                    sample_rate=config.get('sample_rate', 16000),
+                    speech_threshold=config.get('speech_threshold', 0.6)
+                )
+            elif detector_type == 'silero':
+                detector = SileroVadDetector(
+                    threshold=config.get('threshold', 0.5),
+                    sample_rate=config.get('sample_rate', 16000),
+                    min_speech_duration_ms=config.get('min_speech_duration_ms', 250),
+                    min_silence_duration_ms=config.get('min_silence_duration_ms', 100)
+                )
+            elif detector_type == 'combined':
+                detector = CombinedVadDetector(
+                    webrtc_aggressiveness=config.get('webrtc_aggressiveness', 2),
+                    silero_threshold=config.get('silero_threshold', 0.6),
+                    sample_rate=config.get('sample_rate', 16000),
+                    frame_duration_ms=config.get('frame_duration_ms', 30),
+                    speech_confirmation_frames=config.get('speech_confirmation_frames', 2),
+                    silence_confirmation_frames=config.get('silence_confirmation_frames', 30),
+                    speech_buffer_size=config.get('speech_buffer_size', 100),
+                    webrtc_threshold=config.get('webrtc_threshold', 0.6),
+                    use_silero_confirmation=config.get('use_silero_confirmation', True)
+                )
+            else:
+                self.logger.error(f"Unknown detector type: {detector_type}")
+                return None
+            
+            # Set up the detector
+            if detector.setup():
+                self.logger.info(f"Successfully created and set up {detector_type} detector")
+                return detector
+            else:
+                self.logger.error(f"Failed to set up {detector_type} detector")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error creating {detector_type} detector: {e}")
+            return None
     
     def _handle_enable_vad_processing(self, command: EnableVadProcessingCommand) -> bool:
         """

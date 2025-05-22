@@ -30,7 +30,13 @@ class ProfileManager:
                 "detector_type": "combined",
                 "sensitivity": 0.6,
                 "enabled": False,  # No VAD filtering in continuous mode
-                "min_speech_duration": 0.25
+                "min_speech_duration": 0.25,
+                "parameters": {
+                    "frame_duration_ms": 30,
+                    "speech_confirmation_frames": 2,
+                    "silence_confirmation_frames": 30,
+                    "speech_buffer_size": 100
+                }
             },
             "wake_word": {
                 "enabled": False
@@ -45,7 +51,13 @@ class ProfileManager:
                 "detector_type": "combined",
                 "sensitivity": 0.6,
                 "enabled": True,
-                "min_speech_duration": 0.25
+                "min_speech_duration": 0.25,
+                "parameters": {
+                    "frame_duration_ms": 30,
+                    "speech_confirmation_frames": 2,
+                    "silence_confirmation_frames": 30,
+                    "speech_buffer_size": 100
+                }
             },
             "wake_word": {
                 "enabled": False
@@ -60,7 +72,13 @@ class ProfileManager:
                 "detector_type": "combined",
                 "sensitivity": 0.6,
                 "enabled": True,
-                "min_speech_duration": 0.25
+                "min_speech_duration": 0.25,
+                "parameters": {
+                    "frame_duration_ms": 30,
+                    "speech_confirmation_frames": 2,
+                    "silence_confirmation_frames": 30,
+                    "speech_buffer_size": 100
+                }
             },
             "wake_word": {
                 "enabled": True,

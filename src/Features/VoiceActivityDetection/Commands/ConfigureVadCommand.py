@@ -114,6 +114,20 @@ class ConfigureVadCommand(Command):
                 config['speech_confirmation_frames'] = 2
             config['silence_confirmation_frames'] = self.window_size
             
+        # Handle common frame-related parameters from the parameters dict
+        if 'frame_duration_ms' in self.parameters:
+            config['frame_duration_ms'] = self.parameters['frame_duration_ms']
+        
+        if self.detector_type == 'combined':
+            if 'speech_confirmation_frames' in self.parameters:
+                config['speech_confirmation_frames'] = self.parameters['speech_confirmation_frames']
+                
+            if 'silence_confirmation_frames' in self.parameters:
+                config['silence_confirmation_frames'] = self.parameters['silence_confirmation_frames']
+                
+            if 'speech_buffer_size' in self.parameters:
+                config['speech_buffer_size'] = self.parameters['speech_buffer_size']
+        
         # Include any additional parameters from the parameters dict
         config.update(self.parameters)
         

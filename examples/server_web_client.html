@@ -218,6 +218,33 @@
                                 </label>
                                 <small style="color: #666;">Override overall sensitivity</small>
                             </div>
+                            <div style="grid-column: span 2;">
+                                <h4 style="margin: 10px 0 5px 0;">Frame Processing Settings</h4>
+                            </div>
+                            <div>
+                                <label for="frameDuration">Frame Duration: <span id="frameDurValue">30</span>ms</label>
+                                <select id="frameDuration" style="width: 100%;">
+                                    <option value="10">10ms (Low latency)</option>
+                                    <option value="20">20ms</option>
+                                    <option value="30" selected>30ms (Default)</option>
+                                </select>
+                                <small style="color: #666;">Audio frame size for WebRTC</small>
+                            </div>
+                            <div>
+                                <label for="speechConfFrames">Speech Confirmation: <span id="speechConfValue">2</span> frames</label>
+                                <input type="range" id="speechConfFrames" min="1" max="5" step="1" value="2" style="width: 100%;">
+                                <small style="color: #666;">Frames to confirm speech (1-5)</small>
+                            </div>
+                            <div>
+                                <label for="silenceConfFrames">Silence Confirmation: <span id="silenceConfValue">30</span> frames</label>
+                                <input type="range" id="silenceConfFrames" min="10" max="60" step="5" value="30" style="width: 100%;">
+                                <small style="color: #666;">Frames to confirm silence (10-60)</small>
+                            </div>
+                            <div>
+                                <label for="speechBufferSize">Speech Buffer Size: <span id="speechBufValue">100</span> frames</label>
+                                <input type="range" id="speechBufferSize" min="50" max="200" step="10" value="100" style="width: 100%;">
+                                <small style="color: #666;">Max speech buffer (50-200)</small>
+                            </div>
                         </div>
                     </details>
                 </div>
@@ -364,7 +391,11 @@
                     customConfig.vad.parameters = {
                         webrtc_aggressiveness: parseInt(document.getElementById('webrtcAggressiveness').value),
                         silero_threshold: parseFloat(document.getElementById('sileroThreshold').value),
-                        webrtc_threshold: parseFloat(document.getElementById('webrtcThreshold').value)
+                        webrtc_threshold: parseFloat(document.getElementById('webrtcThreshold').value),
+                        frame_duration_ms: parseInt(document.getElementById('frameDuration').value),
+                        speech_confirmation_frames: parseInt(document.getElementById('speechConfFrames').value),
+                        silence_confirmation_frames: parseInt(document.getElementById('silenceConfFrames').value),
+                        speech_buffer_size: parseInt(document.getElementById('speechBufferSize').value)
                     };
                 }
                 
@@ -534,6 +565,22 @@
         
         document.getElementById('webrtcThreshold').oninput = function() {
             document.getElementById('webrtcHistValue').textContent = this.value;
+        };
+        
+        document.getElementById('frameDuration').onchange = function() {
+            document.getElementById('frameDurValue').textContent = this.value;
+        };
+        
+        document.getElementById('speechConfFrames').oninput = function() {
+            document.getElementById('speechConfValue').textContent = this.value;
+        };
+        
+        document.getElementById('silenceConfFrames').oninput = function() {
+            document.getElementById('silenceConfValue').textContent = this.value;
+        };
+        
+        document.getElementById('speechBufferSize').oninput = function() {
+            document.getElementById('speechBufValue').textContent = this.value;
         };
         
         // Event listeners
