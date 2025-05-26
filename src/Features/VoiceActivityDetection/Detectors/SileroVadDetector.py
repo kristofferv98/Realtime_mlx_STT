@@ -191,18 +191,31 @@ class SileroVadDetector(IVoiceActivityDetector):
         # Create cache directory
         torch_hub_dir = os.path.join(self.cache_dir, "torch_hub")
         os.makedirs(torch_hub_dir, exist_ok=True)
-        torch.hub.set_dir(torch_hub_dir)
         
-        self.logger.info(f"Loading Silero VAD model from PyTorch Hub...")
+        # Suppress all stdout during model loading to avoid "Using cache found" messages
+        import io
+        import contextlib
+        import sys
         
-        # Load model from torch hub using the same approach as KoljaB/RealtimeSTT
-        model, utils = torch.hub.load(
-            repo_or_dir=self.TORCH_REPO,
-            model=self.DEFAULT_MODEL,
-            force_reload=False,
-            onnx=False,
-            trust_repo=True
-        )
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        
+        try:
+            torch.hub.set_dir(torch_hub_dir)
+            
+            self.logger.info(f"Loading Silero VAD model from PyTorch Hub...")
+            
+            # Load model from torch hub using the same approach as KoljaB/RealtimeSTT
+            model, utils = torch.hub.load(
+                repo_or_dir=self.TORCH_REPO,
+                model=self.DEFAULT_MODEL,
+                force_reload=False,
+                onnx=False,
+                trust_repo=True,
+                verbose=False
+            )
+        finally:
+            sys.stdout = old_stdout
         
         # Get preprocessing function
         (get_speech_timestamps, 
@@ -232,22 +245,33 @@ class SileroVadDetector(IVoiceActivityDetector):
             os.makedirs(self.cache_dir, exist_ok=True)
             torch_hub_dir = os.path.join(self.cache_dir, "torch_hub")
             os.makedirs(torch_hub_dir, exist_ok=True)
-            torch.hub.set_dir(torch_hub_dir)
             
-            # Load model directly from PyTorch hub
-            self.logger.info("Loading Silero VAD model from PyTorch Hub...")
-            repo_dir = os.path.join(torch_hub_dir, "snakers4_silero-vad_master")
+            # Suppress all stdout during model loading to avoid "Using cache found" messages
+            import io
+            import sys
             
-            # If not already downloaded, get it from hub with ONNX=True
-            if not os.path.exists(repo_dir):
-                self.logger.info("Downloading model from PyTorch Hub...")
-                model, utils = torch.hub.load(
-                    repo_or_dir=self.TORCH_REPO,
-                    model=self.DEFAULT_MODEL,
-                    verbose=True,
-                    onnx=True,
-                    trust_repo=True
-                )
+            old_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            
+            try:
+                torch.hub.set_dir(torch_hub_dir)
+                
+                # Load model directly from PyTorch hub
+                self.logger.info("Loading Silero VAD model from PyTorch Hub...")
+                repo_dir = os.path.join(torch_hub_dir, "snakers4_silero-vad_master")
+                
+                # If not already downloaded, get it from hub with ONNX=True
+                if not os.path.exists(repo_dir):
+                    self.logger.info("Downloading model from PyTorch Hub...")
+                    model, utils = torch.hub.load(
+                        repo_or_dir=self.TORCH_REPO,
+                        model=self.DEFAULT_MODEL,
+                        verbose=False,
+                        onnx=True,
+                        trust_repo=True
+                    )
+            finally:
+                sys.stdout = old_stdout
             
             # Find ONNX model path in hub directory
             expected_model_paths = [

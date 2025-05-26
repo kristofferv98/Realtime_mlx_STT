@@ -1,79 +1,44 @@
 #!/usr/bin/env python3
-# Set environment variables to disable progress bars before ANY other imports
-import os
-os.environ['TQDM_DISABLE'] = '1'
-os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
-
 """
 VAD-Triggered Transcription Example
 
-This example demonstrates audio capture with Voice Activity Detection (VAD)
-and real-time transcription. It:
+This example demonstrates real-time speech transcription using Voice Activity Detection (VAD).
+It continuously listens for speech, detects when you start and stop speaking,
+and transcribes each speech segment automatically.
 
-1. Captures audio from the default microphone
-2. Performs VAD to detect speech segments
-3. Transcribes complete speech segments when silence is detected
-4. Prints the transcribed text to the terminal
+Features:
+- Automatic speech detection using VAD
+- Real-time transcription when speech ends
+- Continuous listening until you press Ctrl+C
 
-Press Ctrl+C to stop recording and exit.
+Usage:
+    python vad_transcription.py [--device DEVICE_ID] [--language LANGUAGE_CODE]
+    
+    Arguments:
+        --device, -d    Audio device index (default: system default)
+        --language, -l  Language code like 'en', 'es', 'fr' (default: auto-detect)
+    
+    Examples:
+        python vad_transcription.py
+        python vad_transcription.py --device 1 --language en
 """
-
-# Clear Python cache to ensure we use the latest code
-import sys
-import importlib
-importlib.invalidate_caches()
-
-# Clear any stale pyc files
-if __name__ == "__main__":
-    import os
-    import re
-    
-    # Get the project root directory
-    project_root = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-    
-    # Function to clean up pyc files
-    def clean_pyc_files(directory):
-        for root, dirs, files in os.walk(directory):
-            for file in files:
-                if file.endswith(".pyc"):
-                    os.remove(os.path.join(root, file))
-            
-            # Clean up __pycache__ directories
-            if "__pycache__" in dirs:
-                pycache_dir = os.path.join(root, "__pycache__")
-                for file in os.listdir(pycache_dir):
-                    os.remove(os.path.join(pycache_dir, file))
-    
-    # Clean up the necessary directories
-    clean_pyc_files(os.path.join(project_root, "src"))
-    # Extra cleaning of critical modules
-    clean_pyc_files(os.path.join(project_root, "src/Features/VoiceActivityDetection"))
-    clean_pyc_files(os.path.join(project_root, "examples"))
 
 import os
 import sys
 import time
-import logging
-import argparse
-import threading
 import signal
-from typing import Dict, Any, List, Optional
+import argparse
+from typing import Optional
 
 # Add project root to path
 project_root = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
-# Import ProgressBarManager for controlling tqdm progress bars
-from src.Infrastructure.ProgressBar.ProgressBarManager import ProgressBarManager
-from src.Infrastructure.Logging import LoggingModule
+# Suppress progress bars for cleaner output
+os.environ['TQDM_DISABLE'] = '1'
+os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
 
-# Initialize the ProgressBarManager first - will be set based on arguments later
-ProgressBarManager.initialize(disabled=False)  # Default to showing progress bars
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = LoggingModule.get_logger(__name__)
+import logging
 
 # Core imports
 from src.Core.Commands.command_dispatcher import CommandDispatcher
@@ -86,389 +51,144 @@ from src.Features.Transcription.TranscriptionModule import TranscriptionModule
 
 
 class VadTranscriptionApp:
-    """
-    Main application for VAD-triggered transcription.
+    """Simple VAD-triggered transcription application."""
     
-    Important note about chunk sizes:
-    Silero VAD models were trained using specific chunk sizes:
-    - For 16kHz sample rate: 512, 1024, or 1536 samples
-    - For 8kHz sample rate: 256, 512, or 768 samples
-    Using other values may reduce the model's accuracy.
-    """
-    
-    def __init__(self, 
-                device_index: Optional[int] = None,
-                vad_aggressiveness: int = 2,
-                language: Optional[str] = None,
-                beam_size: int = 1,
-                quick_mode: bool = True,
-                keep_history: bool = True,
-                history_length: int = 10):
-        """
-        Initialize the application.
-        
-        Args:
-            device_index: Index of audio device to use (None=default)
-            vad_aggressiveness: VAD aggressiveness (0-3, higher=more aggressive)
-            language: Language code or None for auto-detection
-            beam_size: Beam search size for transcription
-            quick_mode: Whether to use quick/parallel mode for faster transcription
-            keep_history: Whether to maintain transcription history
-            history_length: Number of recent transcriptions to keep in history
-        """
+    def __init__(self, device_index: Optional[int] = None, language: Optional[str] = None):
         self.device_index = device_index
-        self.vad_aggressiveness = vad_aggressiveness
         self.language = language
-        self.beam_size = beam_size
-        self.quick_mode = quick_mode
-        
-        # Transcription history settings
-        self.keep_history = keep_history
-        self.history_length = history_length
-        self.transcription_history = []  # List of past transcribed segments
-        
-        # Stats
-        self.speech_count = 0
-        self.total_duration = 0.0
-        self.transcriptions: List[Dict[str, Any]] = []
-        
-        # Status flags
         self.is_running = False
-        self.is_recording = False
-        self.is_processing = False
+        self.transcription_count = 0
         
         # Initialize components
         self.command_dispatcher = CommandDispatcher()
         self.event_bus = EventBus()
         
-        # Set up the event handlers
-        self._setup_event_handlers()
-    
-    def _setup_event_handlers(self):
-        """Set up event handlers for the application."""
-        # Register event handlers for transcription results
-        def on_transcription_updated(session_id, text, is_final, confidence):
-            """Handle transcription update events."""
-            # Only print final transcriptions
-            if is_final:
-                # Format the output nicely
-                logger.info(f"Transcription complete (confidence: {confidence:.2f})")
-                
-                # Store the result in transcription list
-                result = {
-                    'session_id': session_id,
-                    'text': text,
-                    'is_final': is_final,
-                    'confidence': confidence,
-                    'timestamp': time.time()
-                }
-                self.transcriptions.append(result)
-                
-                # Add to history if enabled
-                if self.keep_history and text.strip():  # Only add non-empty transcriptions
-                    self.transcription_history.append(text.strip())
-                    # Limit the history length
-                    if len(self.transcription_history) > self.history_length:
-                        self.transcription_history = self.transcription_history[-self.history_length:]
-                
-                # Get combined history text
-                history_text = ""
-                if self.keep_history and self.transcription_history:
-                    history_text = " ".join(self.transcription_history)
-                
-                # Print the transcription
-                print("\n" + "-" * 80)
-                print(f"TRANSCRIPTION [{session_id[:8]}]:")
-                print(f"{text}")
-                
-                # If history is maintained, show full history too
-                if self.keep_history and len(self.transcription_history) > 1:
-                    print("\nFULL HISTORY:")
-                    print(f"{history_text}")
-                    
-                print("-" * 80)
-        
-        # Track speech stats
-        def on_speech_detected(confidence, timestamp, speech_id):
-            """Handle speech detected events."""
-            self.speech_count += 1
-            logger.info(f"Speech detected [{speech_id[:8]}] (confidence: {confidence:.2f})")
-        
-        def on_silence_detected(speech_duration, start_time, end_time, speech_id):
-            """Handle silence detected events."""
-            self.total_duration += speech_duration
-            avg_duration = self.total_duration / max(1, self.speech_count)
-            logger.info(f"Speech ended [{speech_id[:8]}] (duration: {speech_duration:.2f}s, " 
-                       f"avg: {avg_duration:.2f}s)")
-        
-        # Set up the recording state handler
-        def on_recording_state_changed(previous_state, current_state):
-            """Handle recording state changes."""
-            from src.Features.AudioCapture.Events.RecordingStateChangedEvent import RecordingState
-            
-            # Update recording state
-            self.is_recording = (current_state == RecordingState.RECORDING)
-            
-            # Log state change
-            logger.info(f"Recording state changed: {previous_state.name} -> {current_state.name}")
-            
-            if current_state == RecordingState.RECORDING:
-                logger.info(f"Recording started on device ID: {self.device_index}")
-            elif current_state == RecordingState.STOPPED:
-                logger.info("Recording stopped")
-            elif current_state == RecordingState.ERROR:
-                logger.error("Recording error occurred")
-        
-        # Register the handlers with the event bus
-        TranscriptionModule.on_transcription_updated(self.event_bus, on_transcription_updated)
-        VadModule.on_speech_detected(self.event_bus, on_speech_detected)
-        VadModule.on_silence_detected(self.event_bus, on_silence_detected)
-        AudioCaptureModule.on_recording_state_changed(self.event_bus, on_recording_state_changed)
-    
-    def initialize(self):
-        """Initialize all modules and configure them."""
-        logger.info("Initializing application components...")
-        
-        # Register features
-        self.audio_handler = AudioCaptureModule.register(
-            command_dispatcher=self.command_dispatcher,
-            event_bus=self.event_bus
-        )
-        
-        # Register VAD module
-        self.vad_handler = VadModule.register(
-            command_dispatcher=self.command_dispatcher,
-            event_bus=self.event_bus,
-            default_detector="combined",
-            processing_enabled=True  # Enable processing immediately since we don't use wake word
-        )
-        
-        # Configure VAD with the desired aggressiveness
-        VadModule.configure_vad(
-            command_dispatcher=self.command_dispatcher,
-            detector_type="combined",
-            sensitivity=self.vad_aggressiveness / 3.0,  # Convert 0-3 scale to 0-1 scale
-            window_size=5
-        )
-        
+    def setup(self):
+        """Set up all modules and event handlers."""
+        # Register modules
+        AudioCaptureModule.register(self.command_dispatcher, self.event_bus)
+        VadModule.register(self.command_dispatcher, self.event_bus, processing_enabled=True)
         self.transcription_handler = TranscriptionModule.register(
-            command_dispatcher=self.command_dispatcher,
-            event_bus=self.event_bus,
-            default_engine="mlx_whisper",
-            default_model="whisper-large-v3-turbo",
+            self.command_dispatcher, 
+            self.event_bus,
             default_language=self.language
         )
         
-        # Configure transcription
-        TranscriptionModule.configure(
-            command_dispatcher=self.command_dispatcher,
-            engine_type="mlx_whisper",
-            model_name="whisper-large-v3-turbo",
-            language=self.language,
-            streaming=not self.quick_mode,  # quick_mode is opposite of streaming
-            beam_size=self.beam_size,
-            options={
-                "quick_mode": self.quick_mode
-            }
-        )
-        
-        # Set up VAD integration with transcription
-        # This automatically handles silence detection and transcription
-        TranscriptionModule.register_vad_integration(
-            event_bus=self.event_bus,
-            transcription_handler=self.transcription_handler,
-            session_id=None,  # Generate unique session for each speech segment
-            auto_start_on_speech=True
-        )
-        
-        logger.info("Application components initialized successfully")
-    
-    def start(self):
-        """Start the application and begin processing audio."""
-        if self.is_running:
-            logger.warning("Application is already running")
-            return
-        
-        # Start running
-        self.is_running = True
-        logger.info("Starting VAD-triggered transcription...")
-        
-        # If no device specified, list available devices
-        devices_list = AudioCaptureModule.list_devices(self.command_dispatcher)
-        
-        # The list_devices method returns a list that contains a list of device dicts
-        # Need to flatten the structure to get the actual device list
-        available_devices = []
-        if isinstance(devices_list, list):
-            # Handle nested list structure
-            if len(devices_list) > 0 and isinstance(devices_list[0], list):
-                available_devices = devices_list[0]
-            else:
-                # Try to use the outer list directly
-                available_devices = devices_list
-        
-        logger.debug(f"Found {len(available_devices)} audio devices")
-        
-        if self.device_index is None:
-            # Print available devices for user information
-            logger.info("Available audio devices:")
-            for device in available_devices:
-                device_id = device.get('device_id', device.get('index', 0))
-                device_name = device.get('name', 'Unknown Device')
-                logger.info(f"  [{device_id}]: {device_name}")
-            
-            # Use default device (usually device_id 0 or the first one in the list)
-            default_device = next((d for d in available_devices if d.get('is_default', False)), 
-                                 available_devices[0] if available_devices else None)
-            
-            if default_device:
-                self.device_index = default_device.get('device_id', default_device.get('index', 0))
-                device_name = default_device.get('name', 'Unknown Device')
-                logger.info(f"Using default device: [{self.device_index}]: {device_name}")
-            else:
-                # Fall back to device 0 if no devices found
-                self.device_index = 0
-                logger.warning(f"No devices found. Trying to use device index {self.device_index}")
-        
-        # Start recording with the selected device
-        audio_result = AudioCaptureModule.start_recording(
-            command_dispatcher=self.command_dispatcher,
-            device_id=self.device_index,
-            sample_rate=16000,  # 16kHz required for VAD and transcription
-            chunk_size=512  # Use 512 samples (32ms) which is recommended for Silero VAD
-        )
-        
-        # Handle the return value properly based on its type
-        success = False
-        if isinstance(audio_result, bool):
-            success = audio_result
-        elif isinstance(audio_result, list) and audio_result:
-            # Non-empty list usually indicates success
-            success = True
-        
-        if not success:
-            logger.error(f"Failed to start recording")
-            self.is_running = False
-            return False
-        
-        # Start VAD processing by ensuring it's properly configured
-        # Convert aggressiveness (0-3) to sensitivity (0-1)
-        sensitivity = self.vad_aggressiveness / 3.0
-        
-        vad_result = VadModule.configure_vad(
-            command_dispatcher=self.command_dispatcher,
+        # Configure VAD for good speech detection
+        VadModule.configure_vad(
+            self.command_dispatcher,
             detector_type="combined",
-            sensitivity=sensitivity,
-            window_size=5,
+            sensitivity=0.6,
             min_speech_duration=0.25
         )
         
-        if not vad_result:
-            logger.error(f"Failed to start VAD")
-            # Stop recording since we couldn't start VAD
-            AudioCaptureModule.stop_recording(self.command_dispatcher)
-            self.is_running = False
-            return False
+        # Set up event handlers
+        def on_transcription_updated(session_id, text, is_final, confidence):
+            if is_final and text.strip():
+                self.transcription_count += 1
+                print(f"\n[{self.transcription_count}] Transcription: {text}")
+                print(f"    Confidence: {confidence:.2f}\n")
         
-        logger.info(f"VAD-triggered transcription started. Press Ctrl+C to stop.")
-        return True
-    
+        def on_speech_detected(confidence, timestamp, speech_id):
+            print("🎤 Listening...", end='', flush=True)
+        
+        def on_silence_detected(duration, start_time, end_time, speech_id):
+            print(f" (spoke for {duration:.1f}s)")
+        
+        # Register event handlers
+        TranscriptionModule.on_transcription_updated(self.event_bus, on_transcription_updated)
+        VadModule.on_speech_detected(self.event_bus, on_speech_detected)
+        VadModule.on_silence_detected(self.event_bus, on_silence_detected)
+        
+        # Set up VAD-triggered transcription
+        TranscriptionModule.register_vad_integration(
+            self.event_bus,
+            self.transcription_handler,
+            auto_start_on_speech=True
+        )
+        
+    def start(self):
+        """Start recording and processing."""
+        print("\nVAD-Triggered Transcription")
+        print("=" * 50)
+        
+        # List available devices if none specified
+        if self.device_index is None:
+            devices = AudioCaptureModule.list_devices(self.command_dispatcher)
+            if devices and isinstance(devices[0], list):
+                devices = devices[0]
+            
+            print("\nAvailable audio devices:")
+            for device in devices:
+                device_id = device.get('device_id', device.get('index', 0))
+                device_name = device.get('name', 'Unknown')
+                if device.get('is_default'):
+                    print(f"  [{device_id}] {device_name} (default)")
+                    self.device_index = device_id
+                else:
+                    print(f"  [{device_id}] {device_name}")
+        
+        print(f"\nUsing device: {self.device_index}")
+        print(f"Language: {self.language or 'auto-detect'}")
+        print("\nStarting... Speak and I'll transcribe when you pause.")
+        print("Press Ctrl+C to stop.\n")
+        
+        # Start recording
+        self.is_running = True
+        AudioCaptureModule.start_recording(
+            self.command_dispatcher,
+            device_id=self.device_index,
+            sample_rate=16000,
+            chunk_size=512
+        )
+        
     def stop(self):
-        """Stop all processing and clean up resources."""
-        if not self.is_running:
-            return
-        
-        logger.info("Stopping VAD-triggered transcription...")
-        
-        # No need to stop VAD processing - it's just listening to events
-        # The VAD will stop when audio stops sending events
-        
-        # Stop audio recording
-        try:
-            AudioCaptureModule.stop_recording(self.command_dispatcher)
-        except Exception as e:
-            logger.error(f"Error stopping recording: {e}")
-        
-        # Print summary
-        session_time = time.time()
-        logger.info(f"Session summary:")
-        logger.info(f"  Total speeches detected: {self.speech_count}")
-        logger.info(f"  Total speech duration: {self.total_duration:.2f} seconds")
-        if self.speech_count > 0:
-            logger.info(f"  Average speech duration: {self.total_duration / self.speech_count:.2f} seconds")
-        logger.info(f"  Total transcriptions: {len(self.transcriptions)}")
-        
-        # Print full history if enabled
-        if self.keep_history and self.transcription_history:
-            full_history = " ".join(self.transcription_history)
-            print("\n" + "=" * 80)
-            print("FULL TRANSCRIPTION HISTORY:")
-            print(full_history)
-            print("=" * 80)
-        
+        """Stop recording and clean up."""
+        print("\n\nStopping...")
+        AudioCaptureModule.stop_recording(self.command_dispatcher)
         self.is_running = False
-
+        print(f"Total transcriptions: {self.transcription_count}")
+        
 
 def main():
-    """Parse arguments and run the VAD-triggered transcription example."""
+    """Run the VAD transcription example."""
     parser = argparse.ArgumentParser(
-        description="VAD-triggered transcription example"
+        description="Real-time speech transcription with VAD",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__
     )
-    parser.add_argument("--device", "-d", type=int, default=None,
-                      help="Audio device index (default: system default)")
-    parser.add_argument("--vad-aggressiveness", "-v", type=int, default=2, choices=[0, 1, 2, 3],
-                      help="VAD aggressiveness (0-3, higher=more aggressive, default: 2)")
-    parser.add_argument("--language", "-l", type=str, default=None,
-                      help="Language code (default: auto-detect)")
-    parser.add_argument("--beam-size", "-b", type=int, default=1,
-                      help="Beam search size for transcription (default: 1)")
-    parser.add_argument("--no-quick-mode", action="store_true", 
-                      help="Disable quick mode (more accurate but slower)")
-    parser.add_argument("--no-history", action="store_true",
-                      help="Disable transcription history accumulation")
-    parser.add_argument("--history-length", type=int, default=10,
-                      help="Number of recent transcriptions to maintain in history (default: 10)")
-    parser.add_argument("--no-progress-bars", action="store_true",
-                      help="Hide progress bars from tqdm and huggingface-hub")
+    parser.add_argument('--device', '-d', type=int, help='Audio device index')
+    parser.add_argument('--language', '-l', type=str, help='Language code (e.g., en, es, fr)')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Show detailed logs')
     
     args = parser.parse_args()
     
-    # Update ProgressBarManager based on arguments
-    ProgressBarManager.initialize(disabled=args.no_progress_bars)
+    # Configure logging based on verbose flag
+    if not args.verbose:
+        logging.getLogger().setLevel(logging.ERROR)
+        # Also set specific loggers to ERROR
+        for logger_name in ['realtimestt', 'src']:
+            logging.getLogger(logger_name).setLevel(logging.ERROR)
+        # Suppress warnings
+        import warnings
+        warnings.filterwarnings('ignore')
     
-    # Create and initialize the application
-    app = VadTranscriptionApp(
-        device_index=args.device,
-        vad_aggressiveness=args.vad_aggressiveness,
-        language=args.language,
-        beam_size=args.beam_size,
-        quick_mode=not args.no_quick_mode,
-        keep_history=not args.no_history,
-        history_length=args.history_length
-    )
+    # Create and run the app
+    app = VadTranscriptionApp(device_index=args.device, language=args.language)
+    app.setup()
     
-    app.initialize()
-    
-    # Handle graceful shutdown with Ctrl+C
+    # Handle Ctrl+C gracefully
     def signal_handler(sig, frame):
-        print("\nStopping transcription...")
         app.stop()
         sys.exit(0)
     
     signal.signal(signal.SIGINT, signal_handler)
     
-    # Start the application
-    if app.start():
-        # Keep running until user interrupts
-        try:
-            while app.is_running:
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            app.stop()
-            print("Application stopped by user")
-    
-    return 0
+    # Start and run until interrupted
+    app.start()
+    while app.is_running:
+        time.sleep(0.1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
