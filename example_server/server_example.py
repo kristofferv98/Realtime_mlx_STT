@@ -10,6 +10,9 @@ import os
 import sys
 import logging
 import signal
+import webbrowser
+import threading
+import time
 
 # Add project root to path
 project_root = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
@@ -106,6 +109,21 @@ def main():
     logger.info(f"Server started on http://{server_config.host}:{server_config.port}")
     logger.info("Use the API endpoints to start transcription with a profile")
     logger.info("Example: POST /system/start with {'profile': 'vad-triggered'}")
+    
+    # Open the web client in browser after a short delay
+    def open_browser():
+        import time  # Import here to avoid scope issues
+        time.sleep(1.5)  # Wait for server to fully start
+        web_client_path = os.path.join(os.path.dirname(__file__), 'server_web_client.html')
+        if os.path.exists(web_client_path):
+            logger.info(f"Opening web client in browser...")
+            webbrowser.open(f'file://{os.path.abspath(web_client_path)}')
+        else:
+            logger.warning(f"Web client not found at {web_client_path}")
+    
+    # Start browser in a separate thread
+    browser_thread = threading.Thread(target=open_browser, daemon=True)
+    browser_thread.start()
     
     # Handle graceful shutdown
     def signal_handler(sig, frame):

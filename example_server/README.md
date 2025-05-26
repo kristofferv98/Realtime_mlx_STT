@@ -1,6 +1,6 @@
 # Server Examples
 
-This directory contains examples demonstrating how to use the server module of Realtime_mlx_STT.
+This directory contains examples for running the Realtime_mlx_STT server with web interface.
 
 ## Prerequisites
 
@@ -33,7 +33,12 @@ A complete server that exposes REST API and WebSocket endpoints for the STT syst
 
 **Usage:**
 ```bash
-python examples/server_example.py
+# From the project root directory
+python example_server/server_example.py
+
+# This will:
+# 1. Start the FastAPI server on http://localhost:8000
+# 2. Automatically open the web client in your browser
 ```
 
 **Endpoints:**
@@ -56,10 +61,10 @@ Demonstrates how to interact with the server using Python.
 **Usage:**
 ```bash
 # First start the server
-python examples/server_example.py
+python example_server/server_example.py
 
 # In another terminal, run the client
-python examples/server_client_example.py
+python example_server/server_client_example.py
 ```
 
 ### 3. `server_web_client.html` - Web Browser Client
@@ -80,8 +85,9 @@ A simple HTML/JavaScript client for browser-based interaction.
 - Live configuration status display
 
 **Usage:**
-1. Start the server: `python examples/server_example.py`
-2. Open `server_web_client.html` in a web browser
+1. Start the server: `python example_server/server_example.py`
+2. The web client will automatically open in your browser
+   (or manually open `example_server/server_web_client.html`)
 3. Click "Check Health" to verify server connection
 4. Use the interface to control transcription
 

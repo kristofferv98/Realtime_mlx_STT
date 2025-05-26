@@ -258,6 +258,25 @@ The repository includes several ready-to-use example scripts:
    python examples/check_audio_devices.py
    ```
 
+### Server Examples
+
+For server-based usage with web interface, check the `example_server/` directory:
+
+```bash
+# Start the server with automatic browser opening
+python example_server/server_example.py
+```
+
+This provides:
+- REST API endpoints for transcription control
+- WebSocket for real-time streaming
+- Web interface for easy configuration and monitoring
+- Python client examples
+
+See [example_server/README.md](example_server/README.md) for detailed documentation.
+
+### Additional Configuration
+
 7. **Configuring Logging and Progress Bars** - The centralized systems can be used in your applications:
    ```python
    # Import modules
