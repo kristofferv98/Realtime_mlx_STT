@@ -270,7 +270,7 @@ class OpenAITranscriptionEngine(ITranscriptionEngine):
         try:
             # If audio_data is a file path, use it directly
             if isinstance(audio_data, str):
-                self.logger.info(f"Using existing audio file: {audio_data}")
+                self.logger.info(f"Using existing audio file: {audio_data}, language: {self.language}")
                 
                 # Open the file for sending to the API
                 with open(audio_data, "rb") as audio_file:
