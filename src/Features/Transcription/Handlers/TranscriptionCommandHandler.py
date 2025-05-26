@@ -710,13 +710,14 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
                 self.logger.error(f"Error saving audio to temporary file: {e}")
                 return
             
-            # Process the complete speech segment
+            # Process the complete speech segment with configured language
             command = TranscribeAudioCommand(
                 audio_chunk=wav_path,  # Pass the file path instead of the raw audio
                 session_id=session_id,
                 is_first_chunk=True,
                 is_last_chunk=True,
-                timestamp_ms=time.time() * 1000
+                timestamp_ms=time.time() * 1000,
+                language=self.default_config.language  # Pass the configured language
             )
         else:
             # Use the original audio reference if it's not a numpy array
@@ -727,7 +728,8 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
                 session_id=session_id,
                 is_first_chunk=True,
                 is_last_chunk=True,
-                timestamp_ms=time.time() * 1000
+                timestamp_ms=time.time() * 1000,
+                language=self.default_config.language  # Pass the configured language
             )
         
         self.logger.info(f"Processing speech segment (duration: {duration:.2f}s) with session: {session_id}")
