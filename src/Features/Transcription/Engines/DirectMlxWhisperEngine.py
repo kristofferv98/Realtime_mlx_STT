@@ -848,10 +848,24 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                 self.logger.info(f"Starting DirectMlxWhisperEngine with model={self.model_name}")
                 
                 # Download model from HuggingFace
-                self.model_path = snapshot_download(
-                    repo_id=f'openai/{self.model_name}' if '/' not in self.model_name else self.model_name,
-                    allow_patterns=["config.json", "model.safetensors"]
-                )
+                # Set local_files_only=True if model is already cached to avoid threading issues
+                repo_id = f'openai/{self.model_name}' if '/' not in self.model_name else self.model_name
+                try:
+                    # First try with local files only (avoids threading issues in server context)
+                    self.model_path = snapshot_download(
+                        repo_id=repo_id,
+                        allow_patterns=["config.json", "model.safetensors"],
+                        local_files_only=True
+                    )
+                    self.logger.info(f"Using cached model from: {self.model_path}")
+                except Exception as e:
+                    # If not cached, download it (this might fail in certain threading contexts)
+                    self.logger.info(f"Model not cached, downloading: {repo_id}")
+                    self.model_path = snapshot_download(
+                        repo_id=repo_id,
+                        allow_patterns=["config.json", "model.safetensors"],
+                        local_files_only=False
+                    )
                 
                 # Load configuration
                 with open(f'{self.model_path}/config.json', 'r') as fp:

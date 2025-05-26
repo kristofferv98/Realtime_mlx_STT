@@ -152,7 +152,7 @@ class Server:
         self.running = True
         self.server_thread = threading.Thread(
             target=self._run_server,
-            daemon=True
+            daemon=False
         )
         self.server_thread.start()
         self.logger.info(f"Server started on http://{self.host}:{self.port}")
