@@ -586,7 +586,8 @@
         </header>
 
         <div class="info-box">
-            <strong>ℹ️ Note:</strong> Ensure the server is running on http://localhost:8000. For OpenAI models, set OPENAI_API_KEY environment variable before starting the server.
+            <strong>ℹ️ Note:</strong> The server must be running for this interface to work. Start it with: <code>python example_server/server_example.py</code><br>
+            For OpenAI models, set OPENAI_API_KEY environment variable before starting the server.
         </div>
 
         <!-- Server Status Card -->
@@ -875,12 +876,19 @@
         async function checkHealth() {
             try {
                 const response = await fetch(`${API_BASE}/system/status`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
                 log(`Health check: ${data.status}`);
                 updateServerStatus(data.status === 'online');
                 return data;
             } catch (error) {
-                log(`Health check failed: ${error.message}`, 'error');
+                if (error.message.includes('Failed to fetch')) {
+                    log('Server is not running. Please start the server with: python example_server/server_example.py', 'error');
+                } else {
+                    log(`Health check failed: ${error.message}`, 'error');
+                }
                 updateServerStatus(false);
                 return null;
             }
