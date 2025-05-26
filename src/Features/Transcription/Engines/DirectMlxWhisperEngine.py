@@ -1256,6 +1256,10 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                 # Update language if specified
                 if 'language' in config:
                     self.language = config['language']
+                    # Also update the transcriber's language if it exists
+                    if self.transcriber is not None:
+                        self.transcriber.language = self.language
+                        self.logger.info(f"Updated language to: {self.language}")
                 
                 # Update streaming mode
                 if 'streaming' in config:
