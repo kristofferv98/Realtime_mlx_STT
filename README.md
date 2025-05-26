@@ -16,6 +16,22 @@ Realtime_mlx_STT is a high-performance speech-to-text transcription library opti
 - **Event-driven design** for flexible integration
 - **Thread-safe operations** for responsive applications
 
+## Language Selection
+
+The Whisper large-v3-turbo model supports 99 languages with intelligent language detection:
+
+- **Language-specific mode**: When you select a specific language (e.g., Norwegian, French, Spanish), the model uses language-specific tokens that significantly improve transcription accuracy for that language
+- **Multi-language capability**: Even with a language selected, Whisper can still transcribe other languages if spoken - it's not restricted to only the selected language
+- **Accuracy benefit**: Selecting the primary language you'll be speaking provides much more accurate transcription compared to auto-detect mode
+- **Auto-detect mode**: When no language is specified, the model attempts to detect the language automatically, though with potentially lower accuracy
+
+For example, if you select Norwegian (`no`) as your language:
+- Norwegian speech will be transcribed with high accuracy
+- English speech will still be transcribed correctly if spoken
+- The model uses the Norwegian language token (50288) to optimize for Norwegian
+
+This behavior matches OpenAI's Whisper API - the language parameter guides but doesn't restrict the model.
+
 ## Requirements
 
 - **macOS** with Apple Silicon (M1/M2/M3) - Required, not optional
