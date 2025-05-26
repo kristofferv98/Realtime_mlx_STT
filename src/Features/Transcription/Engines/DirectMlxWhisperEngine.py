@@ -634,10 +634,12 @@ class Transcriber(nn.Module):
         if any_lang or self.language is None:
             # Auto-detect mode: no language token
             sot = mx.array([[50258, 50360, 50365]])
+            logger.info("Using auto-detect mode (no language token)")
         else:
             # Specific language mode: include language token
             lang_token = LANGUAGE_TOKENS.get(self.language, 50259)  # Default to English if not found
             sot = mx.array([[50258, lang_token, 50360, 50365]])
+            logger.info(f"Using language '{self.language}' with token {lang_token}")
             
         self.len_sot = sot.shape[-1]
         

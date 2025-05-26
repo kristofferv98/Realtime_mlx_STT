@@ -732,5 +732,5 @@ class TranscriptionCommandHandler(ICommandHandler[Any]):
                 language=self.default_config.language  # Pass the configured language
             )
         
-        self.logger.info(f"Processing speech segment (duration: {duration:.2f}s) with session: {session_id}")
+        self.logger.info(f"Processing speech segment (duration: {duration:.2f}s) with session: {session_id}, language: {self.default_config.language}")
         self.handle(command)
