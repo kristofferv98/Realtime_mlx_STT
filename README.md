@@ -1,20 +1,20 @@
 # Realtime_mlx_STT
 
-Realtime_mlx_STT is a high-performance speech-to-text transcription library optimized exclusively for Apple Silicon. It leverages Apple's MLX framework to run the Whisper large-v3-turbo model with maximum performance on macOS devices with Apple Silicon chips.
+High-performance speech-to-text transcription library optimized exclusively for Apple Silicon. Leverages MLX framework for real-time on-device transcription with low latency.
 
 ## Features
 
-- **Real-time transcription** with low latency for macOS applications
+- **Real-time transcription** with low latency using MLX Whisper
+- **Multiple APIs** - Python API, REST API, and WebSocket for different use cases  
 - **Apple Silicon optimization** using MLX with Neural Engine acceleration
-- **Voice activity detection** using both WebRTC and Silero models with full configurability
-- **Wake word detection** for hands-free activation using Porcupine
-- **Server/Client architecture** with HTTP API and WebSocket support
-- **Web UI** with comprehensive configuration controls for all parameters
-- **Lazy initialization** for optimal resource usage
-- **Centralized logging system** with runtime configuration and log rotation
-- **Vertical slice architecture** for modular and maintainable code
-- **Event-driven design** for flexible integration
-- **Thread-safe operations** for responsive applications
+- **Voice activity detection** with WebRTC and Silero (configurable thresholds)
+- **Wake word detection** using Porcupine ("Jarvis", "Alexa", etc.)
+- **OpenAI integration** for cloud-based transcription alternative
+- **Interactive CLI** for easy exploration of features
+- **Web UI** with modern interface and real-time updates
+- **Profile system** for quick configuration switching
+- **Event-driven architecture** with command pattern
+- **Thread-safe** and production-ready
 
 ## Language Selection
 
@@ -70,280 +70,213 @@ pip install -e ".[clipboard]"
 
 > **Note**: The project uses `pyproject.toml` as the single source of truth for dependencies. The old `setup.py` has been removed to avoid configuration conflicts.
 
-## Architecture
+## Quick Start
 
-Realtime_mlx_STT uses a vertical slice architecture, organizing code by features rather than technical layers. Each feature contains all necessary components:
+### Interactive CLI (Recommended)
 
-```
-src/
-├── Core/                       # Core interfaces and models
-├── Features/                   # Feature-based vertical slices
-│   ├── AudioCapture/           # Audio input handling
-│   ├── VoiceActivityDetection/ # Speech detection
-│   ├── Transcription/          # Audio-to-text processing
-│   ├── WakeWordDetection/      # Wake word detection
-│   └── RemoteProcessing/       # Remote transcription
-├── Infrastructure/             # Cross-cutting concerns
-│   ├── Logging/                # Centralized logging system
-│   └── ProgressBar/            # Progress bar management
-└── Application/                # Public API and server components
-    ├── Facade/                 # Direct library usage API
-    ├── Server/                 # HTTP/WebSocket server implementation
-    │   ├── Controllers/        # API endpoints for different feature areas
-    │   ├── WebSocket/          # Real-time event broadcasting
-    │   └── Configuration/      # Server and profile configuration
-    └── Client/                 # Python client library for server interaction
-```
-
-### Key Components
-
-- **Audio Capture**: Handles microphone input and audio file processing
-- **Voice Activity Detection**: Detects speech using WebRTC, Silero, or combined approaches
-  - Lazy initialization for optimal resource usage
-  - Full configurability of all parameters (thresholds, frame settings, buffers)
-  - Individual control over each VAD component
-- **Wake Word Detection**: Recognizes specific trigger phrases to activate the system
-- **Transcription**: Processes audio using MLX-optimized Whisper models or OpenAI API
-- **Server**: FastAPI-based HTTP and WebSocket server for remote access
-  - Web UI with comprehensive configuration controls
-  - Real-time transcription display
-  - Support for custom configuration overrides
-- **Client Library**: Python client for interacting with the server
-- **Event System**: Enables loose coupling between components
-- **Logging System**: Provides centralized logging with runtime configuration and log rotation
-- **Progress Bar Control**: Centralized management of progress bars for cleaner user output
-
-## Usage Examples
-
-### Basic API Usage
-
-```python
-from src.Application.Facade import RealtimeSTT
-
-# Initialize the transcription system
-transcriber = RealtimeSTT.create_transcriber(
-    vad_type="combined",        # Use combined VAD (WebRTC + Silero)
-    vad_sensitivity=0.8,        # Higher sensitivity for voice detection
-    model="whisper-large-v3",   # Specify the model to use
-    language="en",              # Specify language (or auto-detect)
-    streaming=True              # Enable real-time streaming
-)
-
-# Register callback for when speech is detected
-transcriber.on_speech_detected = lambda confidence: print(f"Speech detected: {confidence:.2f}")
-
-# Register callback for transcription results
-transcriber.on_transcription_update = lambda text: print(f"Transcribing: {text}")
-transcriber.on_transcription_complete = lambda text: print(f"Final: {text}")
-
-# Start listening
-transcriber.start_listening()
-
-# Wait for user input to stop
-input("Press Enter to stop listening...")
-
-# Stop and clean up
-transcriber.stop_listening()
-transcriber.cleanup()
-```
-
-### Server/Client Usage
-
-```python
-# Server-side (run in a separate process)
-from src.Application import ServerModule
-from src.Core.Commands.command_dispatcher import CommandDispatcher
-from src.Core.Events.event_bus import EventBus
-from src.Features import AudioCaptureModule, TranscriptionModule, VadModule, WakeWordModule
-
-# Create command dispatcher and event bus
-command_dispatcher = CommandDispatcher()
-event_bus = EventBus()
-
-# Register all feature modules
-AudioCaptureModule.register(command_dispatcher, event_bus)
-VadModule.register(command_dispatcher, event_bus)
-TranscriptionModule.register(command_dispatcher, event_bus)
-WakeWordModule.register(command_dispatcher, event_bus)
-
-# Start the server (default: http://127.0.0.1:8000)
-server = ServerModule.register(command_dispatcher, event_bus)
-
-# Client-side (in another process or machine)
-import requests
-import websocket
-import json
-import threading
-
-# Start system with profile and custom configuration
-response = requests.post("http://localhost:8000/system/start", 
-    json={
-        "profile": "vad-triggered",
-        "custom_config": {
-            "transcription": {
-                "engine": "mlx_whisper",
-                "model": "whisper-large-v3-turbo",
-                "language": "no"  # Norwegian
-            },
-            "vad": {
-                "sensitivity": 0.7,
-                "parameters": {
-                    # Individual VAD thresholds
-                    "webrtc_aggressiveness": 2,
-                    "silero_threshold": 0.6,
-                    # Frame processing settings
-                    "speech_confirmation_frames": 2,
-                    "silence_confirmation_frames": 30
-                }
-            }
-        }
-    })
-
-# Connect to WebSocket for real-time events
-def on_message(ws, message):
-    data = json.loads(message)
-    if data["event"] == "transcription":
-        print(f"Transcription: {data['text']}")
-
-ws = websocket.WebSocketApp("ws://localhost:8000/events",
-                          on_message=on_message)
-threading.Thread(target=ws.run_forever, daemon=True).start()
-
-# Later, stop the system
-requests.post("http://localhost:8000/system/stop")
-```
-
-### Included Example Scripts
-
-The repository includes several ready-to-use example scripts:
-
-1. **VAD-Triggered Transcription** - Captures and transcribes speech from your microphone using MLX-optimized Whisper with Voice Activity Detection:
-   ```bash
-   python examples/vad_transcription.py
-   ```
-
-2. **Auto-Typing Transcription** - Transcribes speech and automatically types it into any application:
-   ```bash
-   # Install required dependency
-   uv pip install pyautogui
-   
-   # Run with default settings (typing latest text)
-   python examples/vad_transcription_with_pasting.py
-   
-   # Run with full history mode (types all accumulated transcriptions)
-   python examples/vad_transcription_with_pasting.py --paste-mode full
-   ```
-
-3. **Wake Word Activation** - Transcribes speech only after detecting a wake word:
-   ```bash
-   # Install required dependencies
-   uv pip install -e ".[wakeword]"
-   
-   # Set your Porcupine access key (get from https://console.picovoice.ai/)
-   export PORCUPINE_ACCESS_KEY=your_key_here
-   
-   # Run with default "porcupine" wake word
-   python examples/wake_word_detection.py
-   
-   # Run with custom wake words
-   python examples/wake_word_detection.py --wake-words "jarvis,computer" --sensitivity 0.7
-   ```
-
-4. **OpenAI Transcription** - Transcribes speech using OpenAI's cloud-based GPT-4o-transcribe model:
-   ```bash
-   # Install required dependencies
-   uv pip install -e ".[openai]"
-   
-   # Set your OpenAI API key
-   export OPENAI_API_KEY=your_api_key_here
-   
-   # Run with GPT-4o-transcribe (highest quality)
-   python examples/openai_transcription.py
-   
-   # Run with GPT-4o-mini-transcribe (faster, lower cost)
-   python examples/openai_transcription.py --model gpt-4o-mini-transcribe
-   ```
-
-5. **File Transcription** - Transcribes audio from a file:
-   ```bash
-   python examples/transcribe_file.py path/to/audio/file.mp3
-   ```
-
-6. **Check Audio Devices** - Lists all available audio input devices:
-   ```bash
-   python examples/check_audio_devices.py
-   ```
-
-### Server Examples
-
-For server-based usage with web interface, check the `example_server/` directory:
+The easiest way to explore all features:
 
 ```bash
-# Start the server with automatic browser opening
-python example_server/server_example.py
+python examples/cli.py
 ```
 
-This provides:
-- REST API endpoints for transcription control
-- WebSocket for real-time streaming
-- Web interface for easy configuration and monitoring
-- Python client examples
+This provides a menu-driven interface for:
+- Quick 10-second transcription
+- Continuous streaming mode
+- OpenAI cloud transcription
+- Wake word detection
+- Audio device selection
+- Language configuration
 
-See [example_server/README.md](example_server/README.md) for detailed documentation.
+### Python API
 
-### Additional Configuration
+```python
+from realtime_mlx_stt import STTClient
 
-7. **Configuring Logging and Progress Bars** - The centralized systems can be used in your applications:
-   ```python
-   # Import modules
-   from src.Infrastructure.Logging import LoggingModule, LogLevel
-   from src.Infrastructure.ProgressBar.ProgressBarManager import ProgressBarManager
+# Simple transcription
+client = STTClient()
+for result in client.transcribe(duration=10):
+    print(result.text)
 
-   # Initialize progress bar control first (disable tqdm progress bars globally)
-   ProgressBarManager.initialize(disabled=True)
-   
-   # Initialize logging with desired configuration
-   LoggingModule.initialize(
-       console_level="INFO",
-       file_enabled=True,
-       file_path="logs/application.log",
-       rotation_enabled=True,
-       feature_levels={
-           "AudioCapture": LogLevel.DEBUG,
-           "Transcription": LogLevel.INFO
-       }
-   )
+# With OpenAI
+client = STTClient(openai_api_key="sk-...")
+for result in client.transcribe(engine="openai"):
+    print(result.text)
 
-   # Get a logger for your module
-   logger = LoggingModule.get_logger(__name__)
-   logger.info("Application started")
-   
-   # Enable runtime log level adjustment
-   LoggingModule.start_control_server()
-   
-   # Later, change log levels using the provided utility
-   # python scripts/change_log_level.py AudioCapture DEBUG
-   ```
+# Wake word mode
+client.start_wake_word("jarvis")
+```
 
-   You can control both logging and progress bars with environment variables:
-   ```bash
-   # Set up environment with progress bars hidden (cleaner output)
-   source scripts/set_logging_env.sh prod
-   
-   # Set up environment with progress bars visible (helpful for debugging)
-   source scripts/set_logging_env.sh dev
-   
-   # Manually control progress bars
-   export DISABLE_PROGRESS_BARS=true  # Hide tqdm progress bars
-   ```
-   
-   Command-line arguments for controlling progress bars in example scripts:
-   ```bash
-   # Run with progress bars hidden (though progress bars are now disabled by default)
-   python examples/wake_word_detection.py --no-progress-bars
-   python examples/vad_transcription.py --no-progress-bars
-   python examples/openai_transcription.py --no-progress-bars
-   ```
+### Server Mode
+
+```bash
+# Start server
+cd example_server
+python server_example.py
+
+# Opens web UI at http://localhost:8000
+```
+
+## Architecture
+
+The library provides two specialized interfaces built on a common Features layer:
+
+```
+┌─────────────────────────────────────────────────┐
+│          User Interfaces                         │
+│  • CLI (examples/cli.py)                        │
+│  • Web UI (example_server/)                     │
+├─────────────────────────────────────────────────┤
+│          API Layers                             │
+│  • Python API (realtime_mlx_stt/)              │
+│  • REST/WebSocket (src/Application/Server/)    │
+├─────────────────────────────────────────────────┤
+│          Features Layer                         │
+│  • AudioCapture                                │
+│  • VoiceActivityDetection                      │
+│  • Transcription (MLX/OpenAI)                  │
+│  • WakeWordDetection                           │
+├─────────────────────────────────────────────────┤
+│          Core & Infrastructure                  │
+│  • Command/Event System                         │
+│  • Logging & Configuration                      │
+└─────────────────────────────────────────────────┘
+```
+
+### Key Design Principles
+
+- **Vertical Slice Architecture**: Each feature is self-contained with Commands, Events, Handlers, and Models
+- **Dual API Design**: Python API optimized for direct use, Server API optimized for multi-client scenarios
+- **Event-Driven**: Features communicate via commands and events, not direct dependencies
+- **Production Ready**: Thread-safe, lazy initialization, comprehensive error handling
+
+## API Documentation
+
+### Python API (realtime_mlx_stt)
+
+```python
+from realtime_mlx_stt import STTClient, TranscriptionSession, create_transcriber
+
+# Method 1: Modern Client API
+client = STTClient(
+    openai_api_key="sk-...",     # Optional
+    default_engine="mlx_whisper", # or "openai"
+    default_language="en"         # or None for auto-detect
+)
+
+# Transcribe for fixed duration
+for result in client.transcribe(duration=10):
+    print(f"{result.text} (confidence: {result.confidence})")
+
+# Streaming with stop word
+with client.stream() as stream:
+    for result in stream:
+        print(result.text)
+        if "stop" in result.text.lower():
+            break
+
+# Method 2: Session-based API
+from realtime_mlx_stt import TranscriptionSession, ModelConfig, VADConfig
+
+session = TranscriptionSession(
+    model=ModelConfig(engine="mlx_whisper", language="no"),
+    vad=VADConfig(sensitivity=0.8),
+    on_transcription=lambda r: print(r.text)
+)
+
+with session:
+    time.sleep(30)  # Listen for 30 seconds
+
+# Method 3: Simple Transcriber
+transcriber = create_transcriber(language="es")
+text = transcriber.transcribe_from_mic(duration=5)
+print(f"You said: {text}")
+```
+
+### REST API
+
+```bash
+# Start system with profile
+curl -X POST http://localhost:8000/api/v1/system/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "profile": "vad-triggered",
+    "custom_config": {
+      "transcription": {"language": "fr"},
+      "vad": {"sensitivity": 0.7}
+    }
+  }'
+
+# Get system status
+curl http://localhost:8000/api/v1/system/status
+
+# Transcribe audio file
+curl -X POST http://localhost:8000/api/v1/transcription/transcribe \
+  -H "Content-Type: application/json" \
+  -d '{"audio": "base64_encoded_audio_data"}'
+```
+
+### WebSocket Events
+
+```javascript
+const ws = new WebSocket('ws://localhost:8000/api/v1/ws');
+
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    
+    switch(data.type) {
+        case 'transcription_update':
+            console.log(`Transcribing: ${data.text}`);
+            break;
+        case 'transcription_final':
+            console.log(`Final: ${data.text}`);
+            break;
+        case 'wake_word_detected':
+            console.log(`Wake word: ${data.wake_word}`);
+            break;
+    }
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# API Keys
+export OPENAI_API_KEY="sk-..."        # For OpenAI transcription
+export PORCUPINE_ACCESS_KEY="..."     # For wake word detection
+
+# Logging
+export LOG_LEVEL="INFO"               # DEBUG, INFO, WARNING, ERROR
+export LOG_FORMAT="human"             # human, json, detailed
+```
+
+### Python Configuration
+
+```python
+from realtime_mlx_stt import ModelConfig, VADConfig, WakeWordConfig
+
+# Model configuration
+model = ModelConfig(
+    engine="mlx_whisper",        # or "openai"
+    model="whisper-large-v3-turbo",
+    language="en"                # or None for auto-detect
+)
+
+# VAD configuration
+vad = VADConfig(
+    enabled=True,
+    sensitivity=0.6,             # 0.0-1.0
+    min_speech_duration=0.25,    # seconds
+    min_silence_duration=0.1     # seconds
+)
+
+# Wake word configuration
+wake_word = WakeWordConfig(
+    words=["jarvis", "computer"],
+    sensitivity=0.7,
+    timeout=30                   # seconds
+)
 
 ## Testing
 
@@ -391,15 +324,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## Recent Updates (January 2025)
+## Recent Updates
 
-- **Configuration Cleanup**: Migrated to `pyproject.toml` as the single source of truth for dependencies
-- **Architecture Improvements**: Added proper exports to `__init__.py` files for better import ergonomics
-- **Code Quality**: Fixed thread safety issues and improved error handling
-- **Consistency**: All features now follow the same structure (Commands, Events, Handlers, Models)
-- **Removed Stubs**: Cleaned up empty directories and placeholder features
-
-For detailed changes, see `specs/cleanup_implementation_summary.md`.
+- **New Python API**: Added high-level `realtime_mlx_stt` package with STTClient, TranscriptionSession, and Transcriber
+- **Interactive CLI**: New user-friendly CLI at `examples/cli.py` for exploring all features
+- **Dual API Architecture**: Python API optimized for direct use, Server API for multi-client scenarios
+- **Improved Examples**: Consolidated examples with clear documentation
+- **Architecture Documentation**: Added comprehensive architecture documentation
+- **OpenAI Integration**: Support for OpenAI's transcription API as alternative to local MLX
 
 ## License
 
