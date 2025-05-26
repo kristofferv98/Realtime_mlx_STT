@@ -13,6 +13,7 @@ import signal
 import webbrowser
 import threading
 import time
+import argparse
 
 # Add project root to path
 project_root = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
@@ -41,6 +42,16 @@ from src.Application.Server.Configuration.ServerConfig import ServerConfig
 
 def main():
     """Main function to start the server with all modules."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Realtime_mlx_STT Server")
+    parser.add_argument('--no-browser', action='store_true', 
+                       help='Do not automatically open the web client in browser')
+    parser.add_argument('--host', default='127.0.0.1',
+                       help='Host to bind server to (default: 127.0.0.1)')
+    parser.add_argument('--port', type=int, default=8000,
+                       help='Port to bind server to (default: 8000)')
+    args = parser.parse_args()
+    
     logger.info("Initializing Realtime_mlx_STT Server...")
     
     # Create core components
@@ -93,8 +104,8 @@ def main():
     
     # Configure server
     server_config = ServerConfig(
-        host="127.0.0.1",
-        port=8000,
+        host=args.host,
+        port=args.port,
         debug=False,
         auto_start=True,
         cors_origins=["*"]
@@ -106,24 +117,35 @@ def main():
         event_bus=event_bus,
         config=server_config
     )
-    logger.info(f"Server started on http://{server_config.host}:{server_config.port}")
-    logger.info("Use the API endpoints to start transcription with a profile")
-    logger.info("Example: POST /system/start with {'profile': 'vad-triggered'}")
+    logger.info(f"Server starting on http://{server_config.host}:{server_config.port}")
     
-    # Open the web client in browser after a short delay
-    def open_browser():
-        import time  # Import here to avoid scope issues
-        time.sleep(1.5)  # Wait for server to fully start
-        web_client_path = os.path.join(os.path.dirname(__file__), 'server_web_client.html')
-        if os.path.exists(web_client_path):
-            logger.info(f"Opening web client in browser...")
-            webbrowser.open(f'file://{os.path.abspath(web_client_path)}')
-        else:
-            logger.warning(f"Web client not found at {web_client_path}")
+    if not args.no_browser:
+        logger.info("Web interface will open automatically in your browser...")
+        logger.info("If it doesn't open, manually navigate to the URL above")
+    else:
+        logger.info("Navigate to the URL above to access the web interface")
     
-    # Start browser in a separate thread
-    browser_thread = threading.Thread(target=open_browser, daemon=True)
-    browser_thread.start()
+    logger.info("Press Ctrl+C to stop the server")
+    
+    # Open the web client in browser after a short delay (unless disabled)
+    if not args.no_browser:
+        def open_browser():
+            import time  # Import here to avoid scope issues
+            time.sleep(2.0)  # Wait for server to fully start
+            web_client_path = os.path.join(os.path.dirname(__file__), 'server_web_client.html')
+            if os.path.exists(web_client_path):
+                try:
+                    webbrowser.open(f'file://{os.path.abspath(web_client_path)}')
+                    logger.info("Web client opened in browser")
+                except Exception as e:
+                    logger.warning(f"Could not open browser automatically: {e}")
+                    logger.info(f"Please open {web_client_path} manually")
+            else:
+                logger.warning(f"Web client not found at {web_client_path}")
+        
+        # Start browser in a separate thread
+        browser_thread = threading.Thread(target=open_browser, daemon=True)
+        browser_thread.start()
     
     # Handle graceful shutdown
     def signal_handler(sig, frame):

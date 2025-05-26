@@ -39,6 +39,11 @@ python example_server/server_example.py
 # This will:
 # 1. Start the FastAPI server on http://localhost:8000
 # 2. Automatically open the web client in your browser
+
+# Optional arguments:
+python example_server/server_example.py --no-browser  # Don't open browser automatically
+python example_server/server_example.py --host 0.0.0.0  # Bind to all interfaces
+python example_server/server_example.py --port 8080    # Use different port
 ```
 
 **Endpoints:**
