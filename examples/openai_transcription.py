@@ -7,7 +7,7 @@ os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
 """
 OpenAI Transcription Example
 
-This example demonstrates continuous audio capture with Voice Activity Detection (VAD)
+This example demonstrates audio capture with Voice Activity Detection (VAD)
 and real-time transcription using the OpenAI GPT-4o-transcribe model. It:
 
 1. Captures audio from the default microphone

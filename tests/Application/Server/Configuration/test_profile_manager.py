@@ -28,17 +28,15 @@ class TestProfileManager(unittest.TestCase):
     def test_predefined_profiles(self):
         """Test that predefined profiles are available"""
         # Check that predefined profiles exist
-        self.assertIn("continuous-mlx", ProfileManager.PREDEFINED_PROFILES)
-        self.assertIn("wake-word-mlx", ProfileManager.PREDEFINED_PROFILES)
-        self.assertIn("wake-word-openai", ProfileManager.PREDEFINED_PROFILES)
-        self.assertIn("wake-word-clipboard", ProfileManager.PREDEFINED_PROFILES)
+        self.assertIn("vad-triggered", ProfileManager.PREDEFINED_PROFILES)
+        self.assertIn("wake-word", ProfileManager.PREDEFINED_PROFILES)
         
         # Check predefined profile structure (spot check a few fields)
-        continuous_profile = ProfileManager.PREDEFINED_PROFILES["continuous-mlx"]
-        self.assertEqual(continuous_profile["transcription"]["engine"], "mlx_whisper")
-        self.assertFalse(continuous_profile["wake_word"]["enabled"])
+        vad_profile = ProfileManager.PREDEFINED_PROFILES["vad-triggered"]
+        self.assertTrue(vad_profile["vad"]["enabled"])
+        self.assertFalse(vad_profile["wake_word"]["enabled"])
         
-        wake_word_profile = ProfileManager.PREDEFINED_PROFILES["wake-word-mlx"]
+        wake_word_profile = ProfileManager.PREDEFINED_PROFILES["wake-word"]
         self.assertTrue(wake_word_profile["wake_word"]["enabled"])
         self.assertIn("jarvis", wake_word_profile["wake_word"]["words"])
     
@@ -86,11 +84,11 @@ class TestProfileManager(unittest.TestCase):
         profile_data = {"test": "data"}
         
         # Try to save over a predefined profile
-        success = self.profile_manager.save_profile("continuous-mlx", profile_data)
+        success = self.profile_manager.save_profile("vad-triggered", profile_data)
         self.assertFalse(success)
         
         # The predefined profile should remain unchanged
-        profile = self.profile_manager.get_profile("continuous-mlx")
+        profile = self.profile_manager.get_profile("vad-triggered")
         self.assertNotEqual(profile, profile_data)
     
     def test_list_profiles(self):
@@ -102,7 +100,7 @@ class TestProfileManager(unittest.TestCase):
         profiles = self.profile_manager.list_profiles()
         
         # Should include both predefined and custom profiles
-        self.assertIn("continuous-mlx", profiles)
+        self.assertIn("vad-triggered", profiles)
         self.assertIn("wake-word-mlx", profiles)
         self.assertIn("custom1", profiles)
         self.assertIn("custom2", profiles)
@@ -125,11 +123,11 @@ class TestProfileManager(unittest.TestCase):
     def test_delete_predefined_profile(self):
         """Test that deleting a predefined profile fails"""
         # Try to delete a predefined profile
-        success = self.profile_manager.delete_profile("continuous-mlx")
+        success = self.profile_manager.delete_profile("vad-triggered")
         self.assertFalse(success)
         
         # The predefined profile should still be available
-        self.assertIsNotNone(self.profile_manager.get_profile("continuous-mlx"))
+        self.assertIsNotNone(self.profile_manager.get_profile("vad-triggered"))
     
     def test_delete_nonexistent_profile(self):
         """Test deleting a non-existent profile"""

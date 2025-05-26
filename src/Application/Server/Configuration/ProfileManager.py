@@ -21,27 +21,6 @@ class ProfileManager:
     # Predefined profiles with their configurations
     # These define operating modes, not specific models
     PREDEFINED_PROFILES = {
-        "continuous": {
-            "description": "Continuous transcription - always listening",
-            "transcription": {
-                "auto_start": True
-            },
-            "vad": {
-                "detector_type": "combined",
-                "sensitivity": 0.6,
-                "enabled": False,  # No VAD filtering in continuous mode
-                "min_speech_duration": 0.25,
-                "parameters": {
-                    "frame_duration_ms": 30,
-                    "speech_confirmation_frames": 2,
-                    "silence_confirmation_frames": 30,
-                    "speech_buffer_size": 100
-                }
-            },
-            "wake_word": {
-                "enabled": False
-            }
-        },
         "vad-triggered": {
             "description": "VAD-triggered transcription - only transcribe when speech is detected",
             "transcription": {

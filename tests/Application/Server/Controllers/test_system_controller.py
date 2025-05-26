@@ -82,10 +82,10 @@ class TestSystemController(unittest.TestCase):
         """Test listing available profiles"""
         # Set up mock profile manager
         self.mock_profile_manager.list_profiles.return_value = [
-            "profile1", "profile2", "continuous-mlx"
+            "profile1", "profile2", "vad-triggered"
         ]
         self.mock_profile_manager.PREDEFINED_PROFILES = {
-            "default": "continuous-mlx"
+            "default": "vad-triggered"
         }
         
         # Send request
@@ -95,8 +95,8 @@ class TestSystemController(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         
         response_data = response.json()
-        self.assertEqual(response_data["profiles"], ["profile1", "profile2", "continuous-mlx"])
-        self.assertEqual(response_data["default"], "continuous-mlx")
+        self.assertEqual(response_data["profiles"], ["profile1", "profile2", "vad-triggered"])
+        self.assertEqual(response_data["default"], "vad-triggered")
     
     def test_get_profile(self):
         """Test getting a specific profile"""

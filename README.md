@@ -201,9 +201,9 @@ requests.post("http://localhost:8000/system/stop")
 
 The repository includes several ready-to-use example scripts:
 
-1. **Continuous Transcription** - Captures and transcribes speech from your microphone using MLX-optimized Whisper:
+1. **VAD-Triggered Transcription** - Captures and transcribes speech from your microphone using MLX-optimized Whisper with Voice Activity Detection:
    ```bash
-   python examples/continuous_transcription.py
+   python examples/vad_transcription.py
    ```
 
 2. **Auto-Typing Transcription** - Transcribes speech and automatically types it into any application:
@@ -212,10 +212,10 @@ The repository includes several ready-to-use example scripts:
    uv pip install pyautogui
    
    # Run with default settings (typing latest text)
-   python examples/continuous_transcription_pasting.py
+   python examples/vad_transcription_with_pasting.py
    
    # Run with full history mode (types all accumulated transcriptions)
-   python examples/continuous_transcription_pasting.py --paste-mode full
+   python examples/vad_transcription_with_pasting.py --paste-mode full
    ```
 
 3. **Wake Word Activation** - Transcribes speech only after detecting a wake word:
@@ -306,7 +306,7 @@ The repository includes several ready-to-use example scripts:
    ```bash
    # Run with progress bars hidden (though progress bars are now disabled by default)
    python examples/wake_word_detection.py --no-progress-bars
-   python examples/continuous_transcription.py --no-progress-bars
+   python examples/vad_transcription.py --no-progress-bars
    python examples/openai_transcription.py --no-progress-bars
    ```
 

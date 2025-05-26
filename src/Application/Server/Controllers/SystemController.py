@@ -246,7 +246,7 @@ class SystemController(BaseController):
                 # 5. Enable/configure VAD processing based on profile
                 if vad_config.get("enabled", True):
                     if not wake_word_config.get("enabled", False):
-                        # For continuous transcription, enable VAD immediately
+                        # For VAD-triggered transcription, enable VAD immediately
                         self.logger.info("Enabling VAD processing...")
                         self.send_command(EnableVadProcessingCommand())
                     else:

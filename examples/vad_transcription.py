@@ -5,9 +5,9 @@ os.environ['TQDM_DISABLE'] = '1'
 os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
 
 """
-Continuous Transcription Example
+VAD-Triggered Transcription Example
 
-This example demonstrates continuous audio capture with Voice Activity Detection (VAD)
+This example demonstrates audio capture with Voice Activity Detection (VAD)
 and real-time transcription. It:
 
 1. Captures audio from the default microphone
@@ -85,9 +85,9 @@ from src.Features.VoiceActivityDetection.VadModule import VadModule
 from src.Features.Transcription.TranscriptionModule import TranscriptionModule
 
 
-class ContinuousTranscriptionApp:
+class VadTranscriptionApp:
     """
-    Main application for continuous transcription with VAD.
+    Main application for VAD-triggered transcription.
     
     Important note about chunk sizes:
     Silero VAD models were trained using specific chunk sizes:
@@ -291,7 +291,7 @@ class ContinuousTranscriptionApp:
         
         # Start running
         self.is_running = True
-        logger.info("Starting continuous transcription...")
+        logger.info("Starting VAD-triggered transcription...")
         
         # If no device specified, list available devices
         devices_list = AudioCaptureModule.list_devices(self.command_dispatcher)
@@ -370,7 +370,7 @@ class ContinuousTranscriptionApp:
             self.is_running = False
             return False
         
-        logger.info(f"Continuous transcription started. Press Ctrl+C to stop.")
+        logger.info(f"VAD-triggered transcription started. Press Ctrl+C to stop.")
         return True
     
     def stop(self):
@@ -378,7 +378,7 @@ class ContinuousTranscriptionApp:
         if not self.is_running:
             return
         
-        logger.info("Stopping continuous transcription...")
+        logger.info("Stopping VAD-triggered transcription...")
         
         # No need to stop VAD processing - it's just listening to events
         # The VAD will stop when audio stops sending events
@@ -410,9 +410,9 @@ class ContinuousTranscriptionApp:
 
 
 def main():
-    """Parse arguments and run the continuous transcription example."""
+    """Parse arguments and run the VAD-triggered transcription example."""
     parser = argparse.ArgumentParser(
-        description="Continuous transcription with VAD example"
+        description="VAD-triggered transcription example"
     )
     parser.add_argument("--device", "-d", type=int, default=None,
                       help="Audio device index (default: system default)")
@@ -437,7 +437,7 @@ def main():
     ProgressBarManager.initialize(disabled=args.no_progress_bars)
     
     # Create and initialize the application
-    app = ContinuousTranscriptionApp(
+    app = VadTranscriptionApp(
         device_index=args.device,
         vad_aggressiveness=args.vad_aggressiveness,
         language=args.language,

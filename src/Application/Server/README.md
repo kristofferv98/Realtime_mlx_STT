@@ -4,7 +4,7 @@ This module provides a server-based architecture for the Realtime_mlx_STT system
 
 ## Recent Updates
 
-- **Simplified Profiles**: Now offers 3 operating modes (continuous, vad-triggered, wake-word) separate from model selection
+- **Simplified Profiles**: Now offers 2 operating modes (vad-triggered, wake-word) separate from model selection
 - **Custom Configuration**: Full support for runtime configuration overrides
 - **Enhanced VAD Control**: Individual threshold settings for WebRTC and Silero detectors
 - **Frame Processing**: Configurable frame duration and confirmation windows
@@ -126,7 +126,6 @@ The server can be configured through:
 The server supports simplified configuration profiles for easy setup:
 
 ### Operating Modes
-- `continuous` - Always-on transcription
 - `vad-triggered` - Transcription triggered by voice activity detection
 - `wake-word` - Wake word activated transcription
 

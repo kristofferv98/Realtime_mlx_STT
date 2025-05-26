@@ -50,7 +50,7 @@ src/
 ```
 
 ## Configuration
-- **Profiles**: continuous, vad-triggered, wake-word
+- **Profiles**: vad-triggered, wake-word
 - **Environment Variables**: 
   - `OPENAI_API_KEY` (for cloud transcription)
   - `PORCUPINE_ACCESS_KEY` (for wake word)

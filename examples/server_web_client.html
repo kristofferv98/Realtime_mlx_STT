@@ -625,7 +625,6 @@
                 <div class="form-group">
                     <label for="modeSelect">Operating Mode</label>
                     <select id="modeSelect">
-                        <option value="continuous">Continuous</option>
                         <option value="vad-triggered" selected>VAD-Triggered</option>
                         <option value="wake-word">Wake Word</option>
                     </select>
@@ -673,7 +672,7 @@
                 <h2>VAD Configuration</h2>
             </div>
             <div class="info-box" style="font-size: 0.8rem;">
-                VAD settings apply only to "VAD-Triggered" and "Wake Word" modes.
+                Voice Activity Detection (VAD) is used for all transcription modes.
             </div>
             <div class="grid grid-cols-2">
                 <div class="form-group">
@@ -922,7 +921,7 @@
                         auto_start: true
                     },
                     vad: {
-                        enabled: mode !== 'continuous',
+                        enabled: true,  // VAD is always enabled
                         detector_type: "combined",
                         sensitivity: vadSensitivity,
                         min_speech_duration: minSpeechDuration,

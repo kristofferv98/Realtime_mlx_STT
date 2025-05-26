@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Continuous Transcription Example with Auto-Typing
+VAD-Triggered Transcription Example with Auto-Typing
 
-This example demonstrates continuous audio capture with Voice Activity Detection (VAD),
+This example demonstrates audio capture with Voice Activity Detection (VAD),
 real-time transcription, and automatic text insertion (as if typing). It:
 
 1. Captures audio from the default microphone
@@ -135,9 +135,9 @@ def auto_type_text(text):
             return False
 
 
-class ContinuousTranscriptionApp:
+class VadTranscriptionApp:
     """
-    Main application for continuous transcription with VAD and auto-typing.
+    Main application for VAD-triggered transcription with auto-typing.
     
     Important note about chunk sizes:
     Silero VAD models were trained using specific chunk sizes:
@@ -362,7 +362,7 @@ class ContinuousTranscriptionApp:
         
         # Start running
         self.is_running = True
-        logger.info("Starting continuous transcription with auto-typing...")
+        logger.info("Starting VAD-triggered transcription with auto-typing...")
         logger.info(f"Auto-typing mode: {self.paste_mode.upper()} - will type {'full history' if self.paste_mode == 'full' else 'latest text'}")
         
         if not PYAUTOGUI_AVAILABLE:
@@ -447,7 +447,7 @@ class ContinuousTranscriptionApp:
             return False
         
         print("\n" + "=" * 80)
-        print("CONTINUOUS TRANSCRIPTION WITH AUTO-PASTING")
+        print("VAD-TRIGGERED TRANSCRIPTION WITH AUTO-PASTING")
         print("=" * 80)
         print(f"✓ Recording started on device [{self.device_index}]")
         print(f"✓ Paste mode: {self.paste_mode.upper()}")
@@ -464,7 +464,7 @@ class ContinuousTranscriptionApp:
         if not self.is_running:
             return
         
-        logger.info("Stopping continuous transcription...")
+        logger.info("Stopping VAD-triggered transcription...")
         
         # No need to stop VAD processing - it's just listening to events
         # The VAD will stop when audio stops sending events
@@ -501,9 +501,9 @@ class ContinuousTranscriptionApp:
 
 
 def main():
-    """Parse arguments and run the continuous transcription example with auto-typing."""
+    """Parse arguments and run the VAD-triggered transcription example with auto-typing."""
     parser = argparse.ArgumentParser(
-        description="Continuous transcription with VAD and auto-typing example"
+        description="VAD-triggered transcription with auto-typing example"
     )
     parser.add_argument("--device", "-d", type=int, default=None,
                       help="Audio device index (default: system default)")
@@ -525,7 +525,7 @@ def main():
     args = parser.parse_args()
     
     # Create and initialize the application
-    app = ContinuousTranscriptionApp(
+    app = VadTranscriptionApp(
         device_index=args.device,
         vad_aggressiveness=args.vad_aggressiveness,
         language=args.language,
