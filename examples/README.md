@@ -1,79 +1,46 @@
-# Realtime_mlx_STT Examples
+# Realtime MLX STT Examples
 
-This folder contains simple, clear examples demonstrating the main features of Realtime_mlx_STT.
+## 🚀 Interactive CLI
 
-## Examples
-
-### 1. check_audio_devices.py
-Lists all available audio input devices on your system.
+Explore all features through our user-friendly interactive CLI:
 
 ```bash
-python check_audio_devices.py
+python examples/cli.py
 ```
 
-Use this to find the device ID for your microphone.
+The CLI provides a clean menu interface for:
+- **Quick Transcription** - 10-second local MLX transcription
+- **Streaming Mode** - Continuous transcription with stop command
+- **OpenAI Cloud** - Compare with cloud-based transcription
+- **Wake Word Detection** - "Jarvis" activation demo
+- **Device Selection** - Choose your microphone
+- **Language Settings** - 16 languages + auto-detect
+- **Help & Documentation** - Built-in guide
 
-### 2. simple_vad_example.py
-The simplest VAD transcription example - minimal code, maximum clarity.
-- Uses Voice Activity Detection (VAD) 
-- Transcribes automatically when you stop speaking
-- Good starting point for understanding the library
+## 📁 Additional Example Scripts
 
-```bash
-python simple_vad_example.py
-```
+For developers who want to see implementation details, additional example scripts are available in the `example_scripts/` directory:
 
-### 3. vad_transcription.py
-Full-featured VAD transcription with more options.
-- All features from simple_vad_example.py
-- Command-line arguments for device and language selection
-- More detailed logging and statistics
-- Class-based structure for integration into larger projects
+- `transcribe.py` - Full-featured command-line interface
+- `client_example.py` - High-level API usage patterns
+- `openai_only.py` - Dedicated OpenAI integration
+- `wake_word_example.py` - Wake word detection focus
+- `check_audio_devices.py` - Audio device utility
 
-```bash
-# Use default microphone and auto-detect language
-python vad_transcription.py
+## 🔑 API Keys
 
-# Specify device and language
-python vad_transcription.py --device 1 --language en
-```
+Some features require API keys:
 
-### 4. wake_word_example.py
-Wake word triggered transcription (like "Hey Siri" or "OK Google").
-- Listens for a wake word (default: "porcupine")
-- Only transcribes speech after the wake word
-- Returns to listening mode after timeout
+- **OpenAI Transcription**: Set `OPENAI_API_KEY` environment variable
+- **Wake Word Detection**: Set `PORCUPINE_ACCESS_KEY` environment variable
 
-```bash
-# Requires PORCUPINE_ACCESS_KEY environment variable
-export PORCUPINE_ACCESS_KEY='your-key-here'
+Get your keys:
+- OpenAI: https://platform.openai.com/
+- Porcupine: https://picovoice.ai/ (free tier available)
 
-# Use default wake word "porcupine"
-python wake_word_example.py
+## 📋 Requirements
 
-# Use custom wake word and timeout
-python wake_word_example.py --wake-word jarvis --timeout 60
-```
-
-Get your free Porcupine access key at: https://picovoice.ai/
-
-## Requirements
-
-All examples require:
 - Apple Silicon Mac (M1/M2/M3)
 - Python 3.9+
-- Microphone access
-- Dependencies installed: `pip install -e .`
-
-## Key Differences
-
-- **simple_vad_example.py**: Minimal code, easiest to understand, uses VAD for automatic transcription
-- **vad_transcription.py**: Same as simple but with more features, options, and better structure
-- **wake_word_example.py**: Requires saying a wake word before transcription begins
-
-## Tips
-
-- Run `check_audio_devices.py` first to find your microphone's device ID
-- Start with `simple_vad_example.py` to understand the basics
-- Use `vad_transcription.py` for production use cases
-- Wake word detection requires a Picovoice access key (free tier available)
+- Working microphone
+- Optional: API keys for cloud features
