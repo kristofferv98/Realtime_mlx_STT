@@ -72,6 +72,12 @@ pip install "realtime-mlx-stt[server]"
 pip install "realtime-mlx-stt[openai,server,dev]"
 ```
 
+## 📚 Documentation
+
+- **[Usage Guide](USAGE_GUIDE.md)** - Common patterns and troubleshooting
+- **[API Reference](realtime_mlx_stt/README.md)** - Detailed API documentation
+- **[Examples](examples/)** - Working code examples
+
 ### Install from Source
 
 ```bash

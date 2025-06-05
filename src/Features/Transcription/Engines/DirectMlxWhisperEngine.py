@@ -969,27 +969,39 @@ class DirectMlxWhisperEngine(ITranscriptionEngine):
                     # First try with local files only (avoids threading issues in server context)
                     self.model_path = snapshot_download(
                         repo_id=repo_id,
-                        allow_patterns=["config.json", "model.safetensors"],
+                        allow_patterns=["config.json", "model.safetensors", "tokenizer.json", "*.json", "*.txt"],
                         local_files_only=True
                     )
                     self.logger.info(f"Using cached model from: {self.model_path}")
                 except Exception as e:
                     # If not cached, download it (this might fail in certain threading contexts)
                     self.logger.info(f"Model not cached, downloading: {repo_id}")
+                    self.logger.info("This may take several minutes for the first download (~3.8 GB)...")
                     self.model_path = snapshot_download(
                         repo_id=repo_id,
-                        allow_patterns=["config.json", "model.safetensors"],
+                        allow_patterns=["config.json", "model.safetensors", "tokenizer.json", "*.json", "*.txt"],
                         local_files_only=False
                     )
+                    self.logger.info(f"Model downloaded successfully to: {self.model_path}")
+                
+                # Verify required files exist
+                config_path = os.path.join(self.model_path, 'config.json')
+                model_path = os.path.join(self.model_path, 'model.safetensors')
+                
+                if not os.path.exists(config_path):
+                    raise FileNotFoundError(f"Config file not found at {config_path}")
+                if not os.path.exists(model_path):
+                    raise FileNotFoundError(f"Model file not found at {model_path}")
                 
                 # Load configuration
-                with open(f'{self.model_path}/config.json', 'r') as fp:
+                with open(config_path, 'r') as fp:
                     self.cfg = json.load(fp)
                 
                 # Load weights
+                self.logger.info(f"Loading model weights from {model_path}")
                 self.weights = [(k.replace("embed_positions.weight", "positional_embedding"), 
                               v.swapaxes(1, 2) if ('conv' in k and v.ndim==3) else v) 
-                             for k, v in mx.load(f'{self.model_path}/model.safetensors').items()]
+                             for k, v in mx.load(model_path).items()]
                 
                 # Initialize model with language parameter
                 self.transcriber = Transcriber(self.cfg, language=self.language)
