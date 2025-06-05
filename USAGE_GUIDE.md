@@ -282,17 +282,34 @@ wake_word_config = WakeWordConfig(
 ```python
 from realtime_mlx_stt import TranscriptionSession
 
-# Available callbacks:
+# Available callbacks with correct signatures:
 session = TranscriptionSession(
     model=model_config,
     vad=vad_config,
     wake_word=wake_word_config,
-    on_transcription=lambda result: print(result.text),
-    on_wake_word=lambda word, conf: print(f"Wake: {word}"),
-    on_speech_start=lambda: print("Speech started"),
-    on_speech_end=lambda: print("Speech ended"),    # NOT on_vad_speech_end
+    
+    # Callback signatures (all optional):
+    on_transcription=lambda result: ...,           # (result: TranscriptionResult)
+    on_wake_word=lambda word, conf: ...,          # (word: str, confidence: float) - NO timestamp!
+    on_speech_start=lambda: ...,                  # No parameters
+    on_speech_end=lambda: ...,                    # No parameters - NOT on_vad_speech_end!
+    on_error=lambda error: ...,                   # (error: Exception)
+    
     verbose=True
 )
+```
+
+**Common callback mistakes:**
+```python
+# ❌ WRONG - on_wake_word doesn't have timestamp parameter
+on_wake_word=lambda word, conf, timestamp: ...
+
+# ❌ WRONG - callback name is on_speech_end
+on_vad_speech_end=lambda: ...
+
+# ✅ CORRECT
+on_wake_word=lambda word, conf: print(f"Wake: {word} ({conf:.2f})")
+on_speech_end=lambda: print("Speech ended")
 ```
 
 ## Best Practices
