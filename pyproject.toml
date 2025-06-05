@@ -2,15 +2,22 @@
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["realtime_mlx_stt"]
+package-dir = {"" = "."}
+
+[tool.setuptools.package-data]
+realtime_mlx_stt = ["*.md"]
+
 [project]
-name = "Realtime_mlx_STT"
+name = "realtime-mlx-stt"
 version = "0.1.0"
 description = "Real-time speech-to-text transcription optimized for Apple Silicon"
 readme = "README.md"
 authors = [
     {name = "Kristoffer Vatnehol", email = "kristoffer.vatnehol@gmail.com"}
 ]
-license = {text = "MIT"}
+license = "MIT"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -25,6 +32,25 @@ classifiers = [
     "Operating System :: MacOS",
 ]
 requires-python = ">=3.9"
+keywords = [
+    "speech-to-text",
+    "stt",
+    "transcription",
+    "whisper",
+    "mlx",
+    "apple-silicon",
+    "real-time",
+    "voice-activity-detection",
+    "vad",
+    "wake-word",
+    "speech-recognition",
+    "audio-processing",
+    "macos",
+    "m1",
+    "m2",
+    "m3",
+    "neural-engine"
+]
 dependencies = [
     "setuptools>=65.0.0",
     "wheel>=0.38.0",

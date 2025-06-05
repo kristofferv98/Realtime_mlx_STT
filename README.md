@@ -1,5 +1,10 @@
 # Realtime_mlx_STT
 
+[![PyPI version](https://badge.fury.io/py/realtime-mlx-stt.svg)](https://badge.fury.io/py/realtime-mlx-stt)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-lightgrey.svg)](https://support.apple.com/en-us/HT211814)
+
 High-performance speech-to-text transcription library optimized exclusively for Apple Silicon. Leverages MLX framework for real-time on-device transcription with low latency.
 
 > ⚠️ **IMPORTANT: This library is designed for LOCAL USE ONLY on macOS with Apple Silicon.** The included server is a development tool and should NOT be exposed to the internet or used in production environments without implementing proper security measures.
@@ -48,6 +53,27 @@ This behavior matches OpenAI's Whisper API - the language parameter guides but d
 
 ## Installation
 
+### Install from PyPI (Recommended)
+
+```bash
+# Basic installation
+pip install realtime-mlx-stt
+
+# With OpenAI support for cloud transcription
+pip install "realtime-mlx-stt[openai]"
+
+# With development tools
+pip install "realtime-mlx-stt[dev]"
+
+# With server support for REST/WebSocket APIs
+pip install "realtime-mlx-stt[server]"
+
+# Install everything
+pip install "realtime-mlx-stt[openai,server,dev]"
+```
+
+### Install from Source
+
 ```bash
 # Clone the repository
 git clone https://github.com/kristofferv98/Realtime_mlx_STT.git
@@ -57,17 +83,9 @@ cd Realtime_mlx_STT
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install with pip using pyproject.toml (setup.py has been removed)
+# Install in development mode
 pip install -e .
-
-# For development, include dev dependencies
-pip install -e ".[dev]"
-
-# For OpenAI transcription support
-pip install -e ".[openai]"
 ```
-
-> **Note**: The project uses `pyproject.toml` as the single source of truth for dependencies. The old `setup.py` has been removed to avoid configuration conflicts.
 
 ## Quick Start
 
