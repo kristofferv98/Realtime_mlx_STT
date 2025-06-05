@@ -178,6 +178,7 @@ session = TranscriptionSession(
     model=model_config,
     vad=vad_config,
     wake_word=wake_word_config,
+    device_id=2,  # Optional: specify audio device (e.g., BlackHole)
     on_wake_word=lambda word, conf: print(f"Wake word: {word}"),
     on_transcription=lambda result: print(f"Text: {result.text}"),
     on_speech_start=lambda: print("Listening..."),
@@ -225,15 +226,42 @@ client.set_language(None)
 
 ## Audio Device Selection
 
+### With STTClient
 ```python
 # List available devices
 devices = client.list_devices()
 for device in devices:
     print(f"[{device.index}] {device.name}")
 
-# Select specific device
+# Set device for future sessions
 client.set_device(device_index=2)
+
+# Or specify device when creating client
+client = STTClient(device_index=2)
 ```
+
+### With TranscriptionSession
+```python
+from realtime_mlx_stt import TranscriptionSession, list_audio_devices
+
+# Find device by name
+devices = list_audio_devices()
+blackhole_index = None
+for device in devices:
+    if "BlackHole" in device.name:
+        blackhole_index = device.index
+        break
+
+# Create session with specific device
+session = TranscriptionSession(
+    model=model_config,
+    vad=vad_config,
+    device_id=blackhole_index,  # Specify device here
+    on_transcription=lambda r: print(r.text)
+)
+```
+
+**Note**: Audio device cannot be changed mid-session. You must stop and create a new session to switch devices.
 
 ## Error Handling
 
