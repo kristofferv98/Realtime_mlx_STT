@@ -33,7 +33,7 @@ dependencies = [
     "cffi>=1.15.0",
     "regex>=2022.0.0",
     "requests>=2.28.0",
-    "urllib3>=1.26.0",
+    "urllib3>=1.26.19",
     "certifi>=2022.0.0",
     "charset-normalizer>=2.0.0",
     "idna>=3.0",
@@ -95,10 +95,6 @@ openai = [
 ]
 wakeword = [
     # pvporcupine>=3.0.0 now included in main dependencies
-]
-clipboard = [
-    "pyautogui>=0.9.54",
-    "pyperclip>=1.9.0",
 ]
 server = [
     "fastapi>=0.104.0",

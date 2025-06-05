@@ -2,6 +2,8 @@
 
 High-performance speech-to-text transcription library optimized exclusively for Apple Silicon. Leverages MLX framework for real-time on-device transcription with low latency.
 
+> ⚠️ **IMPORTANT: This library is designed for LOCAL USE ONLY on macOS with Apple Silicon.** The included server is a development tool and should NOT be exposed to the internet or used in production environments without implementing proper security measures.
+
 ## Features
 
 - **Real-time transcription** with low latency using MLX Whisper
@@ -35,7 +37,7 @@ This behavior matches OpenAI's Whisper API - the language parameter guides but d
 ## Requirements
 
 - **macOS** with Apple Silicon (M1/M2/M3) - Required, not optional
-- **Python 3.11+**
+- **Python 3.9+** (3.11+ recommended for best performance)
 - **MLX** for Apple Silicon optimization
 - **PyAudio** for audio capture
 - **WebRTC VAD** and **Silero VAD** for voice activity detection
@@ -51,7 +53,7 @@ This behavior matches OpenAI's Whisper API - the language parameter guides but d
 git clone https://github.com/kristofferv98/Realtime_mlx_STT.git
 cd Realtime_mlx_STT
 
-# Set up Python environment (requires Python 3.8+ but 3.11+ recommended)
+# Set up Python environment (requires Python 3.9+ but 3.11+ recommended)
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
@@ -63,9 +65,6 @@ pip install -e ".[dev]"
 
 # For OpenAI transcription support
 pip install -e ".[openai]"
-
-# For clipboard/auto-typing features
-pip install -e ".[clipboard]"
 ```
 
 > **Note**: The project uses `pyproject.toml` as the single source of truth for dependencies. The old `setup.py` has been removed to avoid configuration conflicts.
@@ -109,8 +108,10 @@ client.start_wake_word("jarvis")
 
 ### Server Mode
 
+> **Security Note**: The server is for local development only and binds to localhost by default. Do NOT expose it to the internet without proper authentication and security measures.
+
 ```bash
-# Start server
+# Start server (localhost only - safe)
 cd example_server
 python server_example.py
 
@@ -188,7 +189,8 @@ with session:
     time.sleep(30)  # Listen for 30 seconds
 
 # Method 3: Simple Transcriber
-transcriber = create_transcriber(language="es")
+from realtime_mlx_stt import Transcriber
+transcriber = Transcriber(language="es")
 text = transcriber.transcribe_from_mic(duration=5)
 print(f"You said: {text}")
 ```
@@ -211,27 +213,28 @@ curl -X POST http://localhost:8000/api/v1/system/start \
 curl http://localhost:8000/api/v1/system/status
 
 # Transcribe audio file
-curl -X POST http://localhost:8000/api/v1/transcription/transcribe \
+curl -X POST http://localhost:8000/api/v1/transcription/audio \
   -H "Content-Type: application/json" \
-  -d '{"audio": "base64_encoded_audio_data"}'
+  -d '{"audio_data": "base64_encoded_audio_data"}'
 ```
 
 ### WebSocket Events
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/api/v1/ws');
+const ws = new WebSocket('ws://localhost:8000/events');
 
 ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     
     switch(data.type) {
-        case 'transcription_update':
-            console.log(`Transcribing: ${data.text}`);
+        case 'transcription':
+            if (data.is_final) {
+                console.log(`Final: ${data.text}`);
+            } else {
+                console.log(`Transcribing: ${data.text}`);
+            }
             break;
-        case 'transcription_final':
-            console.log(`Final: ${data.text}`);
-            break;
-        case 'wake_word_detected':
+        case 'wake_word':
             console.log(`Wake word: ${data.wake_word}`);
             break;
     }
@@ -245,6 +248,9 @@ ws.onmessage = (event) => {
 # API Keys
 export OPENAI_API_KEY="sk-..."        # For OpenAI transcription
 export PORCUPINE_ACCESS_KEY="..."     # For wake word detection
+# Alternative names for Picovoice universal key (same as PORCUPINE_ACCESS_KEY):
+# export PICOVOICE_ACCESS_KEY="..."
+# export PICOVOICE_API_KEY="..."
 
 # Logging
 export LOG_LEVEL="INFO"               # DEBUG, INFO, WARNING, ERROR
@@ -272,6 +278,7 @@ vad = VADConfig(
 )
 
 # Wake word configuration
+# Note: Requires PORCUPINE_ACCESS_KEY environment variable
 wake_word = WakeWordConfig(
     words=["jarvis", "computer"],
     sensitivity=0.7,

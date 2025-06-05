@@ -102,6 +102,18 @@ def main():
     )
     logger.info("VAD-Transcription integration configured")
     
+    # Security warning for non-localhost binding
+    if args.host not in ['127.0.0.1', 'localhost', '::1']:
+        logger.warning("="*60)
+        logger.warning("⚠️  SECURITY WARNING: Server binding to %s", args.host)
+        logger.warning("This server is designed for LOCAL DEVELOPMENT ONLY!")
+        logger.warning("It lacks authentication and security features.")
+        logger.warning("DO NOT expose this server to the internet!")
+        logger.warning("="*60)
+        
+        # Give user time to read warning
+        time.sleep(3)
+    
     # Configure server
     server_config = ServerConfig(
         host=args.host,
