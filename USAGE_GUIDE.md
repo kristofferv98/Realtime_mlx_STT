@@ -150,6 +150,52 @@ finally:
     client.stop()
 ```
 
+#### Advanced: Using TranscriptionSession with Custom VAD
+```python
+# For more control over VAD and silence detection
+from realtime_mlx_stt import TranscriptionSession, ModelConfig, VADConfig, WakeWordConfig
+
+# Configure with longer silence timeout
+vad_config = VADConfig(
+    sensitivity=0.6,
+    min_speech_duration=0.3,
+    min_silence_duration=2.5  # Allow natural pauses
+)
+
+wake_word_config = WakeWordConfig(
+    words=["jarvis"],
+    sensitivity=0.7,
+    timeout=30  # Seconds to listen after wake word
+)
+
+model_config = ModelConfig(
+    engine="mlx_whisper",
+    language="en"
+)
+
+# Create session with all callbacks
+session = TranscriptionSession(
+    model=model_config,
+    vad=vad_config,
+    wake_word=wake_word_config,
+    device_id=2,  # Optional: specify audio device (e.g., BlackHole)
+    on_wake_word=lambda word, conf: print(f"Wake word: {word}"),
+    on_transcription=lambda result: print(f"Text: {result.text}"),
+    on_speech_start=lambda: print("Listening..."),
+    on_speech_end=lambda: print("Processing...")
+)
+
+# Start session
+session.start()
+
+try:
+    time.sleep(300)  # Run for 5 minutes
+except KeyboardInterrupt:
+    pass
+finally:
+    session.stop()
+```
+
 ## Engine Selection
 
 ### MLX Whisper (Default)
@@ -180,15 +226,42 @@ client.set_language(None)
 
 ## Audio Device Selection
 
+### With STTClient
 ```python
 # List available devices
 devices = client.list_devices()
 for device in devices:
     print(f"[{device.index}] {device.name}")
 
-# Select specific device
+# Set device for future sessions
 client.set_device(device_index=2)
+
+# Or specify device when creating client
+client = STTClient(device_index=2)
 ```
+
+### With TranscriptionSession
+```python
+from realtime_mlx_stt import TranscriptionSession, list_audio_devices
+
+# Find device by name
+devices = list_audio_devices()
+blackhole_index = None
+for device in devices:
+    if "BlackHole" in device.name:
+        blackhole_index = device.index
+        break
+
+# Create session with specific device
+session = TranscriptionSession(
+    model=model_config,
+    vad=vad_config,
+    device_id=blackhole_index,  # Specify device here
+    on_transcription=lambda r: print(r.text)
+)
+```
+
+**Note**: Audio device cannot be changed mid-session. You must stop and create a new session to switch devices.
 
 ## Error Handling
 
@@ -206,6 +279,67 @@ except Exception as e:
     # - Model download failures
 ```
 
+## Configuration Classes
+
+### VADConfig
+```python
+from realtime_mlx_stt import VADConfig
+
+vad_config = VADConfig(
+    sensitivity=0.6,              # 0.0-1.0, higher = more sensitive
+    min_speech_duration=0.3,      # Minimum seconds to consider as speech
+    min_silence_duration=2.5,     # Seconds of silence before ending (default: 0.1-0.5)
+    detector_type="combined"      # "webrtc", "silero", or "combined"
+)
+```
+
+**Note**: The default `min_silence_duration` is very short (0.1-0.5s), which may cut off speech during natural pauses. Consider setting it to 1.5-2.5 seconds for more natural conversation.
+
+### WakeWordConfig
+```python
+from realtime_mlx_stt import WakeWordConfig
+
+wake_word_config = WakeWordConfig(
+    words=["jarvis"],            # List of wake words
+    sensitivity=0.7,             # 0.0-1.0, detection sensitivity
+    timeout=30                   # NOT speech_timeout - seconds before timeout
+)
+```
+
+### TranscriptionSession Callbacks
+```python
+from realtime_mlx_stt import TranscriptionSession
+
+# Available callbacks with correct signatures:
+session = TranscriptionSession(
+    model=model_config,
+    vad=vad_config,
+    wake_word=wake_word_config,
+    
+    # Callback signatures (all optional):
+    on_transcription=lambda result: ...,           # (result: TranscriptionResult)
+    on_wake_word=lambda word, conf: ...,          # (word: str, confidence: float) - NO timestamp!
+    on_speech_start=lambda: ...,                  # No parameters
+    on_speech_end=lambda: ...,                    # No parameters - NOT on_vad_speech_end!
+    on_error=lambda error: ...,                   # (error: Exception)
+    
+    verbose=True
+)
+```
+
+**Common callback mistakes:**
+```python
+# ❌ WRONG - on_wake_word doesn't have timestamp parameter
+on_wake_word=lambda word, conf, timestamp: ...
+
+# ❌ WRONG - callback name is on_speech_end
+on_vad_speech_end=lambda: ...
+
+# ✅ CORRECT
+on_wake_word=lambda word, conf: print(f"Wake: {word} ({conf:.2f})")
+on_speech_end=lambda: print("Speech ended")
+```
+
 ## Best Practices
 
 1. **Always use callbacks for wake word detection** - It's event-driven, not polling
@@ -213,6 +347,7 @@ except Exception as e:
 3. **Handle exceptions** - Microphone access and network issues are common
 4. **Use context managers for streaming** - Ensures proper cleanup
 5. **Check device permissions** - macOS requires microphone access approval
+6. **Adjust VAD silence duration** - Default is too short for natural speech
 
 ## Need Help?
 

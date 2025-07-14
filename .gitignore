@@ -59,3 +59,4 @@ debug/
 # Claude-specific files
 CLAUDE.md
 .claude/
+uv.lock
