@@ -195,25 +195,18 @@ client = STTClient(
     default_language="en"
 )
 
-# 3. Prevent false triggers with time-based VAD sensitivity - NEW!
-text = client.transcribe_utterance(
-    vad_sensitivity=0.6,           # Normal sensitivity after 3s
-    initial_vad_sensitivity=0.4,   # Lower sensitivity for first 3s
-    initial_sensitivity_duration=3.0  # Duration of lower sensitivity
-)
-
-# 4. Voice command pattern (auto-stops by default)
+# 3. Voice command pattern (auto-stops by default)
 for result in client.transcribe():
     print(result.text)
 
-# 5. Continuous streaming (no auto-stop by default)
+# 4. Continuous streaming (no auto-stop by default)
 with client.stream() as stream:
     for result in stream:
         print(result.text)
         if "stop" in result.text.lower():
             break
 
-# 6. Voice assistant pattern - simplified
+# 5. Voice assistant pattern - simplified
 while True:
     text = client.transcribe_utterance()
     if "quit" in text.lower():
@@ -229,12 +222,6 @@ while True:
 - `auto_stop_after_silence`: Enable/disable auto-stop behavior (default: False for client, True for transcribe(), False for stream())
 - `silence_timeout`: Override silence timeout (uses vad_min_silence_duration if None)
 - `max_duration`: Maximum recording duration for safety (default: 30.0 for utterance, 60.0 for others)
-
-#### Time-based VAD Sensitivity (transcribe_utterance only)
-- `initial_vad_sensitivity`: Lower sensitivity for initial recording period (prevents false triggers from ambient noise)
-- `initial_sensitivity_duration`: Duration in seconds to use initial sensitivity (default: 3.0)
-
-**Use Case**: When triggered by keyboard shortcuts or programmatically, prevents false triggers from keyboard noise or ambient sounds by starting with lower sensitivity for the first few seconds.
 
 ## Architecture
 

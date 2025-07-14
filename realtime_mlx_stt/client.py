@@ -437,8 +437,6 @@ class STTClient:
         model: Optional[str] = None,
         language: Optional[str] = None,
         vad_sensitivity: Optional[float] = None,
-        initial_vad_sensitivity: Optional[float] = None,
-        initial_sensitivity_duration: float = 3.0,
         max_duration: Optional[float] = None
     ) -> str:
         """
@@ -452,9 +450,7 @@ class STTClient:
             engine: Override default engine
             model: Override default model
             language: Override default language
-            vad_sensitivity: Override VAD sensitivity (used after initial period)
-            initial_vad_sensitivity: VAD sensitivity for initial recording period (prevents false triggers)
-            initial_sensitivity_duration: Duration in seconds to use initial sensitivity (default: 3.0)
+            vad_sensitivity: Override VAD sensitivity
             max_duration: Maximum recording duration (seconds, default: 30)
             
         Returns:
@@ -464,13 +460,6 @@ class STTClient:
             client = STTClient()
             text = client.transcribe_utterance()
             print(f"You said: {text}")
-            
-            # Prevent false triggers with lower initial sensitivity
-            text = client.transcribe_utterance(
-                vad_sensitivity=0.6,
-                initial_vad_sensitivity=0.4,
-                initial_sensitivity_duration=3.0
-            )
         """
         # Use defaults
         engine = engine or self.config.default_engine
@@ -478,10 +467,6 @@ class STTClient:
         language = language or self.config.default_language
         vad_sensitivity = vad_sensitivity if vad_sensitivity is not None else self.config.vad_sensitivity
         max_duration = max_duration or 30.0
-        
-        # Handle time-based VAD sensitivity adjustment
-        use_initial_sensitivity = initial_vad_sensitivity is not None
-        current_sensitivity = initial_vad_sensitivity if use_initial_sensitivity else vad_sensitivity
         
         # Check engine requirements
         if engine == "openai" and not self.openai_api_key:
@@ -501,11 +486,11 @@ class STTClient:
                 results.append(result.text)
                 last_result_time = time.time()
         
-        # Create initial session
+        # Create session
         session = TranscriptionSession(
             model=ModelConfig(engine=engine, model=model, language=language),
             vad=VADConfig(
-                sensitivity=current_sensitivity,
+                sensitivity=vad_sensitivity,
                 min_silence_duration=self.config.vad_min_silence_duration,
                 min_speech_duration=self.config.vad_min_speech_duration
             ),
@@ -520,44 +505,10 @@ class STTClient:
         try:
             start_time = time.time()
             has_had_speech = False
-            sensitivity_switched = False
             
             while session.is_running():
-                current_time = time.time()
-                elapsed_time = current_time - start_time
-                
-                # Check if we need to switch to higher sensitivity
-                if (use_initial_sensitivity and 
-                    not sensitivity_switched and 
-                    elapsed_time >= initial_sensitivity_duration):
-                    
-                    if self.config.verbose:
-                        print(f"Switching VAD sensitivity from {current_sensitivity} to {vad_sensitivity}")
-                    
-                    # Stop current session
-                    session.stop()
-                    
-                    # Create new session with normal sensitivity
-                    session = TranscriptionSession(
-                        model=ModelConfig(engine=engine, model=model, language=language),
-                        vad=VADConfig(
-                            sensitivity=vad_sensitivity,
-                            min_silence_duration=self.config.vad_min_silence_duration,
-                            min_speech_duration=self.config.vad_min_speech_duration
-                        ),
-                        on_transcription=on_transcription,
-                        verbose=self.config.verbose
-                    )
-                    
-                    # Start new session
-                    if not session.start():
-                        raise RuntimeError("Failed to start transcription session with normal sensitivity")
-                    
-                    sensitivity_switched = True
-                    continue
-                
                 # Check duration
-                if elapsed_time >= max_duration:
+                if (time.time() - start_time) >= max_duration:
                     break
                 
                 # Check for results
