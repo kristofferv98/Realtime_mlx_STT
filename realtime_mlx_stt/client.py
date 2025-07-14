@@ -181,8 +181,17 @@ class STTClient:
             verbose=verbose
         )
         
-        # Setup logging (skip in fast start mode)
-        if not verbose and not fast_start:
+        # Setup logging based on verbose flag
+        if verbose:
+            # Setup full logging for debugging
+            import logging
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                force=True  # Override any existing configuration
+            )
+        else:
+            # Setup minimal logging
             setup_minimal_logging()
         
         # Initialize fast start state BEFORE using it
@@ -629,7 +638,7 @@ class STTClient:
                 min_speech_duration=self.config.vad_min_speech_duration
             ),
             'on_transcription': on_transcription,
-            'verbose': self.config.verbose and not self.config.fast_start
+            'verbose': self.config.verbose
         }
         
         # Use cached models if available (fast start mode)
