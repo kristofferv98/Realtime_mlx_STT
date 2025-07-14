@@ -58,6 +58,7 @@ class VADConfig:
     webrtc_aggressiveness: Optional[int] = None  # 0-3
     silero_threshold: Optional[float] = None  # 0.1-0.9
     frame_duration_ms: Optional[int] = None  # 10, 20, or 30
+    silence_confirmation_frames: Optional[int] = None  # Frames needed to confirm silence
     
     def __post_init__(self):
         """Validate parameters."""
@@ -95,6 +96,8 @@ class VADConfig:
             parameters["silero_threshold"] = self.silero_threshold
         if self.frame_duration_ms is not None:
             parameters["frame_duration_ms"] = self.frame_duration_ms
+        if self.silence_confirmation_frames is not None:
+            parameters["silence_confirmation_frames"] = self.silence_confirmation_frames
         
         if parameters:
             config["parameters"] = parameters

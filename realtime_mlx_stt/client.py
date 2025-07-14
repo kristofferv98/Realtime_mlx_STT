@@ -35,12 +35,17 @@ class STTConfig:
     default_device: Optional[int] = None
     
     # VAD defaults
-    vad_sensitivity: float = 0.6
+    vad_sensitivity: float = 0.5
+    vad_min_silence_duration: float = 2.0
     vad_min_speech_duration: float = 0.25
     
     # Wake word defaults
     wake_word_sensitivity: float = 0.7
     wake_word_timeout: int = 30
+    
+    # Auto-stop settings
+    auto_stop_after_silence: bool = False
+    silence_timeout: float = 2.0  # seconds of silence before stopping
     
     # Client settings
     auto_start: bool = True
@@ -89,6 +94,13 @@ class STTClient:
         default_model: Optional[str] = None,
         default_language: Optional[str] = None,
         device_index: Optional[int] = None,
+        # VAD configuration
+        vad_sensitivity: float = 0.5,
+        vad_min_silence_duration: float = 2.0,
+        vad_min_speech_duration: float = 0.25,
+        # Auto-stop settings
+        auto_stop_after_silence: bool = False,
+        silence_timeout: Optional[float] = None,  # Uses vad_min_silence_duration if None
         verbose: bool = False
     ):
         """
@@ -101,6 +113,11 @@ class STTClient:
             default_model: Default model name
             default_language: Default language code (None for auto-detect)
             device_index: Audio device index (None for system default)
+            vad_sensitivity: Voice activity detection sensitivity (0.0-1.0, default: 0.5)
+            vad_min_silence_duration: Minimum silence duration to end speech (seconds, default: 2.0)
+            vad_min_speech_duration: Minimum speech duration to start transcription (seconds, default: 0.25)
+            auto_stop_after_silence: Automatically stop after silence timeout (default: False)
+            silence_timeout: Override silence timeout (uses vad_min_silence_duration if None)
             verbose: Enable verbose logging
         """
         # Store API keys
@@ -119,6 +136,11 @@ class STTClient:
             default_model=default_model or self._get_default_model(default_engine),
             default_language=default_language,
             default_device=device_index,
+            vad_sensitivity=vad_sensitivity,
+            vad_min_silence_duration=vad_min_silence_duration,
+            vad_min_speech_duration=vad_min_speech_duration,
+            auto_stop_after_silence=auto_stop_after_silence,
+            silence_timeout=silence_timeout or vad_min_silence_duration,
             verbose=verbose
         )
         
@@ -143,6 +165,8 @@ class STTClient:
         model: Optional[str] = None,
         language: Optional[str] = None,
         vad_sensitivity: Optional[float] = None,
+        auto_stop_after_silence: Optional[bool] = True,  # Default to True for single utterance
+        silence_timeout: Optional[float] = None,
         on_partial: Optional[Callable[[str], None]] = None
     ) -> Iterator[TranscriptionResult]:
         """
@@ -154,6 +178,8 @@ class STTClient:
             model: Override default model
             language: Override default language
             vad_sensitivity: Override VAD sensitivity
+            auto_stop_after_silence: Override auto-stop behavior
+            silence_timeout: Override silence timeout (seconds)
             on_partial: Callback for partial results (if supported)
             
         Yields:
@@ -167,7 +193,9 @@ class STTClient:
         engine = engine or self.config.default_engine
         model = model or self.config.default_model
         language = language or self.config.default_language
-        vad_sensitivity = vad_sensitivity or self.config.vad_sensitivity
+        vad_sensitivity = vad_sensitivity if vad_sensitivity is not None else self.config.vad_sensitivity
+        auto_stop_after_silence = auto_stop_after_silence if auto_stop_after_silence is not None else self.config.auto_stop_after_silence
+        silence_timeout = silence_timeout or self.config.silence_timeout
         
         # Check engine requirements
         if engine == "openai" and not self.openai_api_key:
@@ -187,7 +215,11 @@ class STTClient:
         # Create session
         session = TranscriptionSession(
             model=ModelConfig(engine=engine, model=model, language=language),
-            vad=VADConfig(sensitivity=vad_sensitivity),
+            vad=VADConfig(
+                sensitivity=vad_sensitivity,
+                min_silence_duration=self.config.vad_min_silence_duration,
+                min_speech_duration=self.config.vad_min_speech_duration
+            ),
             on_transcription=on_transcription,
             verbose=self.config.verbose
         )
@@ -198,21 +230,38 @@ class STTClient:
         
         try:
             start_time = time.time()
+            last_result_time = start_time
+            last_activity_time = start_time
+            has_had_speech = False
             
             while session.is_running():
                 # Check duration
                 if duration and (time.time() - start_time) >= duration:
                     break
                 
-                # Yield results
+                # Yield results and track timing
                 with result_lock:
+                    if results:
+                        has_had_speech = True
+                        last_activity_time = time.time()
                     while results:
                         yield results.pop(0)
+                        last_result_time = time.time()
+                
+                # Check auto-stop condition - only after we've had some speech
+                if auto_stop_after_silence and has_had_speech:
+                    silence_duration = time.time() - last_activity_time
+                    if silence_duration >= silence_timeout:
+                        break
                 
                 time.sleep(0.05)
             
-            # Final results
-            time.sleep(0.5)  # Allow final processing
+            # Allow extra time for final processing after silence is detected
+            if auto_stop_after_silence and has_had_speech:
+                time.sleep(2.0)  # Wait longer for transcription to complete
+            else:
+                time.sleep(0.5)  # Standard wait time
+                
             with result_lock:
                 while results:
                     yield results.pop(0)
@@ -226,10 +275,20 @@ class STTClient:
         engine: Optional[str] = None,
         model: Optional[str] = None,
         language: Optional[str] = None,
-        vad_sensitivity: Optional[float] = None
+        vad_sensitivity: Optional[float] = None,
+        auto_stop_after_silence: Optional[bool] = False,  # Default to False for continuous streaming
+        silence_timeout: Optional[float] = None
     ):
         """
         Context manager for streaming transcription.
+        
+        Args:
+            engine: Override default engine
+            model: Override default model  
+            language: Override default language
+            vad_sensitivity: Override VAD sensitivity
+            auto_stop_after_silence: Override auto-stop behavior
+            silence_timeout: Override silence timeout (seconds)
         
         Example:
             with client.stream() as stream:
@@ -237,12 +296,20 @@ class STTClient:
                     print(result.text)
                     if "goodbye" in result.text.lower():
                         break
+                        
+            # Auto-stop after silence
+            with client.stream(auto_stop_after_silence=True, silence_timeout=3.0) as stream:
+                for result in stream:
+                    print(result.text)
+                # Stream automatically stops after 3 seconds of silence
         """
         # Use defaults
         engine = engine or self.config.default_engine
         model = model or self.config.default_model
         language = language or self.config.default_language
-        vad_sensitivity = vad_sensitivity or self.config.vad_sensitivity
+        vad_sensitivity = vad_sensitivity if vad_sensitivity is not None else self.config.vad_sensitivity
+        auto_stop_after_silence = auto_stop_after_silence if auto_stop_after_silence is not None else self.config.auto_stop_after_silence
+        silence_timeout = silence_timeout or self.config.silence_timeout
         
         # Check requirements
         if engine == "openai" and not self.openai_api_key:
@@ -261,21 +328,43 @@ class STTClient:
         # Create session
         session = TranscriptionSession(
             model=ModelConfig(engine=engine, model=model, language=language),
-            vad=VADConfig(sensitivity=vad_sensitivity),
+            vad=VADConfig(
+                sensitivity=vad_sensitivity,
+                min_silence_duration=self.config.vad_min_silence_duration,
+                min_speech_duration=self.config.vad_min_speech_duration
+            ),
             on_transcription=on_transcription,
             verbose=self.config.verbose
         )
         
         # Stream iterator
         def stream_iterator():
+            last_result_time = time.time()
+            last_activity_time = time.time()
+            has_had_speech = False
+            
             while self._stream_active and session.is_running():
+                # Check auto-stop condition - only after we've had some speech
+                if auto_stop_after_silence and has_had_speech:
+                    silence_duration = time.time() - last_activity_time
+                    if silence_duration >= silence_timeout:
+                        break
+                
                 with result_lock:
+                    if results:
+                        has_had_speech = True
+                        last_activity_time = time.time()
                     while results:
                         yield results.pop(0)
+                        last_result_time = time.time()
                 time.sleep(0.05)
             
-            # Final results
-            time.sleep(0.5)
+            # Allow extra time for final processing after silence is detected
+            if auto_stop_after_silence and has_had_speech:
+                time.sleep(2.0)  # Wait longer for transcription to complete
+            else:
+                time.sleep(0.5)  # Standard wait time
+                
             with result_lock:
                 while results:
                     yield results.pop(0)
@@ -289,6 +378,97 @@ class STTClient:
         finally:
             self._stream_active = False
             session.stop()
+    
+    def transcribe_until_silence(
+        self,
+        engine: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        vad_sensitivity: Optional[float] = None,
+        silence_timeout: Optional[float] = None,
+        max_duration: Optional[float] = None
+    ) -> str:
+        """
+        Transcribe audio until silence is detected, then return the complete text.
+        
+        This is a convenience method that provides the common "record until silence" behavior
+        similar to voice assistants.
+        
+        Args:
+            engine: Override default engine
+            model: Override default model
+            language: Override default language
+            vad_sensitivity: Override VAD sensitivity
+            silence_timeout: Override silence timeout (seconds)
+            max_duration: Maximum recording duration (seconds, default: 60)
+            
+        Returns:
+            Complete transcribed text as a single string
+            
+        Example:
+            client = STTClient()
+            text = client.transcribe_until_silence(silence_timeout=2.0)
+            print(f"You said: {text}")
+        """
+        # Use defaults
+        silence_timeout = silence_timeout or self.config.silence_timeout
+        max_duration = max_duration or 60.0
+        
+        # Collect all results
+        results = []
+        
+        for result in self.transcribe(
+            duration=max_duration,
+            engine=engine,
+            model=model,
+            language=language,
+            vad_sensitivity=vad_sensitivity,
+            auto_stop_after_silence=True,
+            silence_timeout=silence_timeout
+        ):
+            results.append(result.text)
+        
+        # Join all transcription results
+        return " ".join(results).strip()
+    
+    def transcribe_utterance(
+        self,
+        engine: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        vad_sensitivity: Optional[float] = None,
+        max_duration: Optional[float] = None
+    ) -> str:
+        """
+        Transcribe a single utterance (speech segment).
+        
+        This is the most common use case: start recording, detect speech,
+        stop after silence, and return the complete transcription.
+        
+        Args:
+            engine: Override default engine
+            model: Override default model
+            language: Override default language
+            vad_sensitivity: Override VAD sensitivity
+            max_duration: Maximum recording duration (seconds, default: 30)
+            
+        Returns:
+            Complete transcribed text as a single string
+            
+        Example:
+            client = STTClient()
+            text = client.transcribe_utterance()
+            print(f"You said: {text}")
+        """
+        # Use client defaults with auto-stop enabled
+        return self.transcribe_until_silence(
+            engine=engine,
+            model=model,
+            language=language,
+            vad_sensitivity=vad_sensitivity,
+            silence_timeout=self.config.vad_min_silence_duration,
+            max_duration=max_duration or 30.0
+        )
     
     def start_wake_word(
         self,

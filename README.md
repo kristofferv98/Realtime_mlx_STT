@@ -12,6 +12,7 @@ High-performance speech-to-text transcription library optimized exclusively for 
 ## Features
 
 - **Real-time transcription** with low latency using MLX Whisper
+- **Auto-stop after silence** - Voice assistant-like "record until silence" behavior
 - **Multiple APIs** - Python API, REST API, and WebSocket for different use cases  
 - **Apple Silicon optimization** using MLX with Neural Engine acceleration
 - **Voice activity detection** with WebRTC and Silero (configurable thresholds)
@@ -116,15 +117,39 @@ This provides a menu-driven interface for:
 ```python
 from realtime_mlx_stt import STTClient
 
-# Simple transcription
+# Single utterance transcription (most common use case)
 client = STTClient()
-for result in client.transcribe(duration=10):
+text = client.transcribe_utterance()
+print(f"You said: {text}")
+
+# Configure VAD settings at client level
+client = STTClient(
+    vad_sensitivity=0.6,
+    vad_min_silence_duration=2.0,
+    default_language="en"
+)
+
+# Voice command pattern (auto-stops after silence)
+for result in client.transcribe():  # auto_stop_after_silence=True by default
     print(result.text)
+
+# Continuous streaming (no auto-stop)
+with client.stream() as stream:  # auto_stop_after_silence=False by default
+    for result in stream:
+        print(result.text)
+        if "stop" in result.text.lower():
+            break
+
+# Voice assistant pattern
+while True:
+    text = client.transcribe_utterance()
+    if "quit" in text.lower():
+        break
+    print(f"Command: {text}")
 
 # With OpenAI
 client = STTClient(openai_api_key="sk-...")
-for result in client.transcribe(engine="openai"):
-    print(result.text)
+text = client.transcribe_utterance(engine="openai")
 
 # Wake word mode
 client.start_wake_word("jarvis")
@@ -141,6 +166,62 @@ python server_example.py
 
 # Opens web UI at http://localhost:8000
 ```
+
+## Auto-Stop After Silence
+
+The library now supports automatic stopping after silence detection, providing voice assistant-like behavior where transcription automatically ends after a period of silence.
+
+### Key Features
+
+- **Configurable silence timeout**: Set how long to wait before stopping (default: 2.0 seconds)
+- **Per-call override**: Enable/disable auto-stop for specific transcription calls
+- **Multiple API support**: Works with `transcribe()`, `stream()`, and `transcribe_until_silence()`
+- **Convenience method**: `transcribe_until_silence()` for simple use cases
+
+### Usage Examples
+
+```python
+from realtime_mlx_stt import STTClient
+
+# 1. Single utterance (most common) - NEW!
+client = STTClient()
+text = client.transcribe_utterance()
+print(f"You said: {text}")
+
+# 2. Configure VAD at client level - NEW!
+client = STTClient(
+    vad_sensitivity=0.6,
+    vad_min_silence_duration=2.0,
+    default_language="en"
+)
+
+# 3. Voice command pattern (auto-stops by default)
+for result in client.transcribe():
+    print(result.text)
+
+# 4. Continuous streaming (no auto-stop by default)
+with client.stream() as stream:
+    for result in stream:
+        print(result.text)
+        if "stop" in result.text.lower():
+            break
+
+# 5. Voice assistant pattern - simplified
+while True:
+    text = client.transcribe_utterance()
+    if "quit" in text.lower():
+        break
+    print(f"Command: {text}")
+```
+
+### Configuration Options
+
+- `vad_sensitivity`: Voice activity detection sensitivity (0.0-1.0, default: 0.5)
+- `vad_min_silence_duration`: Minimum silence duration to end speech (seconds, default: 2.0)
+- `vad_min_speech_duration`: Minimum speech duration to start transcription (seconds, default: 0.25)
+- `auto_stop_after_silence`: Enable/disable auto-stop behavior (default: False for client, True for transcribe(), False for stream())
+- `silence_timeout`: Override silence timeout (uses vad_min_silence_duration if None)
+- `max_duration`: Maximum recording duration for safety (default: 30.0 for utterance, 60.0 for others)
 
 ## Architecture
 
