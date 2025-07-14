@@ -185,17 +185,17 @@ class STTClient:
         if not verbose and not fast_start:
             setup_minimal_logging()
         
-        # Pre-load models if fast_start is enabled
-        if fast_start:
-            self._ensure_models_loaded()
+        # Initialize fast start state BEFORE using it
+        self._models_loaded = False
+        self._recording_started = False
         
         # Active session
         self._session: Optional[TranscriptionSession] = None
         self._stream_active = False
         
-        # Fast start state
-        self._models_loaded = False
-        self._recording_started = False
+        # Pre-load models if fast_start is enabled (AFTER attributes are defined)
+        if fast_start:
+            self._ensure_models_loaded()
     
     def _ensure_models_loaded(self):
         """Ensure models are loaded for fast startup."""
