@@ -443,7 +443,8 @@ class STTClient:
         Transcribe a single utterance (speech segment).
         
         This is the most common use case: start recording, detect speech,
-        stop after silence, and return the complete transcription.
+        stop after silence, and return the complete transcription IMMEDIATELY
+        when results are available.
         
         Args:
             engine: Override default engine
@@ -460,15 +461,75 @@ class STTClient:
             text = client.transcribe_utterance()
             print(f"You said: {text}")
         """
-        # Use client defaults with auto-stop enabled
-        return self.transcribe_until_silence(
-            engine=engine,
-            model=model,
-            language=language,
-            vad_sensitivity=vad_sensitivity,
-            silence_timeout=self.config.vad_min_silence_duration,
-            max_duration=max_duration or 30.0
+        # Use defaults
+        engine = engine or self.config.default_engine
+        model = model or self.config.default_model
+        language = language or self.config.default_language
+        vad_sensitivity = vad_sensitivity if vad_sensitivity is not None else self.config.vad_sensitivity
+        max_duration = max_duration or 30.0
+        
+        # Check engine requirements
+        if engine == "openai" and not self.openai_api_key:
+            raise ValueError(
+                "OpenAI API key required. Pass openai_api_key to STTClient "
+                "or set OPENAI_API_KEY environment variable."
+            )
+        
+        # Results tracking
+        results = []
+        result_lock = threading.Lock()
+        last_result_time = time.time()
+        
+        def on_transcription(result: TranscriptionResult):
+            nonlocal last_result_time
+            with result_lock:
+                results.append(result.text)
+                last_result_time = time.time()
+        
+        # Create session
+        session = TranscriptionSession(
+            model=ModelConfig(engine=engine, model=model, language=language),
+            vad=VADConfig(
+                sensitivity=vad_sensitivity,
+                min_silence_duration=self.config.vad_min_silence_duration,
+                min_speech_duration=self.config.vad_min_speech_duration
+            ),
+            on_transcription=on_transcription,
+            verbose=self.config.verbose
         )
+        
+        # Start session
+        if not session.start():
+            raise RuntimeError("Failed to start transcription session")
+        
+        try:
+            start_time = time.time()
+            has_had_speech = False
+            
+            while session.is_running():
+                # Check duration
+                if (time.time() - start_time) >= max_duration:
+                    break
+                
+                # Check for results
+                with result_lock:
+                    if results:
+                        has_had_speech = True
+                        # Return immediately after a short delay (0.3s) to ensure no more results
+                        time.sleep(0.3)
+                        if results:  # Check again after delay
+                            break
+                
+                time.sleep(0.05)
+            
+            # Get final results
+            with result_lock:
+                final_text = " ".join(results).strip()
+                
+        finally:
+            session.stop()
+        
+        return final_text
     
     def start_wake_word(
         self,
