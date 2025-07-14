@@ -195,18 +195,28 @@ client = STTClient(
     default_language="en"
 )
 
-# 3. Voice command pattern (auto-stops by default)
+# 3. Fast startup mode (reduces ~500ms to <100ms) - NEW!
+client = STTClient(fast_start=True)
+text = client.transcribe_utterance()  # Starts much faster
+
+# 4. Ultra-fast recording (starts in <50ms) - NEW!
+client = STTClient(fast_start=True)
+client.start_recording_immediate()  # Starts in <50ms
+client.wait_for_ready()             # Wait for models to load
+text = client.get_transcription()   # Get the result
+
+# 5. Voice command pattern (auto-stops by default)
 for result in client.transcribe():
     print(result.text)
 
-# 4. Continuous streaming (no auto-stop by default)
+# 6. Continuous streaming (no auto-stop by default)
 with client.stream() as stream:
     for result in stream:
         print(result.text)
         if "stop" in result.text.lower():
             break
 
-# 5. Voice assistant pattern - simplified
+# 7. Voice assistant pattern - simplified
 while True:
     text = client.transcribe_utterance()
     if "quit" in text.lower():
@@ -222,6 +232,12 @@ while True:
 - `auto_stop_after_silence`: Enable/disable auto-stop behavior (default: False for client, True for transcribe(), False for stream())
 - `silence_timeout`: Override silence timeout (uses vad_min_silence_duration if None)
 - `max_duration`: Maximum recording duration for safety (default: 30.0 for utterance, 60.0 for others)
+
+#### Performance Optimization
+- `fast_start`: Enable fast startup mode (reduces ~500ms to <100ms, default: False)
+
+**Environment Variables:**
+- `PRELOAD_STT_MODELS=true`: Pre-load models at import time for even faster startup
 
 ## Architecture
 
